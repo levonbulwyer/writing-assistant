@@ -1,6 +1,6 @@
 # Roadmap and test guide
 
-Phase 1 is built. Use its list to demo and test the app: each item says how to try it. `npm run e2e` runs most of these automatically. Phases 2 and 3 are the next work. Their tasks follow ASD-STE100 rules: one instruction for each sentence, and short sentences.
+Phase 1 is built. Use its list to demo and test the app: each item says how to try it. `npm run e2e` runs most of these automatically. Phase 2 is the next work. The ASD-STE100 profile is parked for later.
 
 ## Phase 1: Built
 
@@ -106,9 +106,9 @@ Improvement loop:  Log → Test → Build → Release → Use at work ↻
 - [ ] Check only the paragraphs that changed. This keeps long texts fast.
 - [ ] Write one test for each stage.
 
-## Phase 3: ASD-STE100 profile
+## Parked: ASD-STE100 profile
 
-ASD-STE100 Issue 9 (2025) is a controlled language for technical text. Plain English stays the default profile. Use STE100 for customer instructions and process notes.
+On hold for now. ASD-STE100 Issue 9 (2025) is a controlled language for technical text. Plain English stays the default profile. Use STE100 for customer instructions and process notes.
 
 ### 14. STE100 writing rules
 - [ ] Get your copy of ASD-STE100 Issue 9 from asd-ste100.org. The copy is free.

@@ -19,7 +19,7 @@ Rules-only writing checker for call-centre work email. Ships as one offline HTML
 - `src/rules.js`: word lists, samples, example templates, label groups. Most content changes happen here.
 - `src/engine.js`: clean-up, rules, spelling, checklists, scores, personal-detail redaction, template search and merge.
 - `src/app.js`: interface. State lives in `state`; browser storage keys are prefixed `wa.v1.`.
-- `ROADMAP.md`: every feature with how to test it. Tick items there as they are demoed. Phases 2 and 3 are planned work.
+- `ROADMAP.md`: every feature with how to test it. Tick items there as they are demoed. Phase 2 is planned work; the ASD-STE100 profile is parked.
 - ASD-STE100: the specification and its dictionary belong to ASD. Never commit the dictionary or copy large parts of the spec into this repo. The app imports the approved-word list from the owner's own copy at run time.
 
 ## Demoing
