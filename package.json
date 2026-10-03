@@ -1,0 +1,19 @@
+{
+  "name": "writing-assistant",
+  "version": "1.0.0",
+  "description": "A rules-only writing assistant for work email. One HTML file, no AI, no network.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check": "npm test && npm run build && npm run e2e",
+    "e2e": "node test/e2e.mjs"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "dictionary-en-gb": "^3.0.0",
+    "esbuild": "^0.24.2",
+    "nspell": "^2.1.5",
+    "playwright": "^1.63.0"
+  },
+  "type": "module"
+}
