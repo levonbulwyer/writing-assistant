@@ -1,6 +1,8 @@
 # Roadmap and test guide
 
-Everything on the roadmap is built. Use this list to demo and test it: each item says how to try it in the app. `npm run e2e` runs most of these automatically.
+Phase 1 is built. Use its list to demo and test the app: each item says how to try it. `npm run e2e` runs most of these automatically. Phases 2 and 3 are the next work. Their tasks follow ASD-STE100 rules: one instruction for each sentence, and short sentences.
+
+## Phase 1: Built
 
 ## 1. Scope and ground rules
 - [x] Message types: **General**, **Email**, **Complaint reply** (segmented control at the top).
@@ -70,6 +72,71 @@ Everything on the roadmap is built. Use this list to demo and test it: each item
 - [x] **Use Template**: replace the draft or insert at the cursor; the first blank is selected and **Tab** / **Shift+Tab** move between blanks.
 - [x] Edit, relabel and delete (delete asks to confirm).
 - [x] Export and import the whole library.
+
+## Phase 2: Improvement pipeline
+
+Real false alarms and missed problems become tests. The tests then change the rules. Do this loop each fortnight.
+
+```
+Check pipeline:    Clean → Split → Classify → Rules → Score
+Improvement loop:  Log → Test → Build → Release → Use at work ↻
+```
+
+### 11. Feedback log
+- [ ] Add a Report button to each issue card. It keeps the sentence and the rule in a local log.
+- [ ] Add a Missed problem button. Select the text, then type what the app did not find.
+- [ ] Count the fixes, ignores and turn-offs for each rule. Keep the counts in this browser.
+- [ ] Show a Rule health table in Settings. Sort the table by the ignore rate.
+- [ ] Blank the personal details in each log item before you save it.
+- [ ] Add an Export log button. Make the log one file.
+
+### 12. Release routine
+- [ ] Copy each log item into `test/engine.test.mjs` as a test case.
+- [ ] Change the rule until the new test passes.
+- [ ] Run `npm run check`. Do not release the file if a test fails.
+- [ ] Show the version number and a short list of changes in Settings.
+- [ ] Copy the new file to the work computer. Open it and test the five samples.
+- [ ] Each fortnight, read the Rule health table. Change or remove rules with many ignores.
+
+### 13. Check pipeline
+- [ ] Divide the check into five stages: clean, split, classify, rules and score.
+- [ ] Classify each sentence as an instruction or a description.
+- [ ] Give each rule a profile tag: Plain English, Email, Complaint or STE100.
+- [ ] Add a Profile setting. Make Plain English the default profile.
+- [ ] Check only the paragraphs that changed. This keeps long texts fast.
+- [ ] Write one test for each stage.
+
+## Phase 3: ASD-STE100 profile
+
+ASD-STE100 Issue 9 (2025) is a controlled language for technical text. Plain English stays the default profile. Use STE100 for customer instructions and process notes.
+
+### 14. STE100 writing rules
+- [ ] Get your copy of ASD-STE100 Issue 9 from asd-ste100.org. The copy is free.
+- [ ] Set the sentence limit to 20 words for instructions and 25 words for descriptions.
+- [ ] Flag paragraphs that have more than six sentences.
+- [ ] Flag sentences with two instructions. Show one sentence for each instruction.
+- [ ] Flag a condition that comes after its instruction. Show the condition first: "If …, do …".
+- [ ] Flag the present perfect. Change "I have checked" to "I checked".
+- [ ] Flag -ing verb forms and long verb groups, for example "should have been".
+- [ ] Flag the passive voice in all instructions.
+- [ ] Flag noun clusters of more than three words.
+- [ ] Flag warnings that do not start with a simple command.
+
+### 15. STE100 words
+- [ ] Import the approved word list from your copy of the dictionary. Keep it in this browser.
+- [ ] Do not put the ASD dictionary in this repo. ASD owns the copyright.
+- [ ] Flag words that are not on the list. Show the approved word if the list has one.
+- [ ] Add a Technical names list for products and parts, for example modem and router.
+- [ ] Add a Technical verbs list for work actions, for example reset and escalate.
+- [ ] Flag one thing with two names in one message. Use one name for one thing.
+
+### 16. STE100 in the app
+- [ ] Add an Instructions message type for customer steps.
+- [ ] Make a checklist for Instructions: numbered steps, one action each, conditions first, warnings first.
+- [ ] Show Instruction or Description on each issue card.
+- [ ] Show an STE score: the percentage of sentences with no STE100 issue.
+- [ ] Add two STE100 sample texts: a modem reset and a refund process.
+- [ ] Add STE100 example templates to the library.
 
 ## Parked ideas
 - [ ] Phrase bank of approved sentences to click and insert.
