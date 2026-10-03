@@ -232,6 +232,8 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .u-wordy, .u-filler, .u-passive { text-decoration: underline rgba(0, 122, 255, 0.75); }
 .bg-long { background: rgba(255, 204, 0, 0.2); border-radius: 0 !important; }
 .bg-fill { background: rgba(175, 82, 222, 0.16); box-shadow: 0 0 0 1px rgba(175, 82, 222, 0.35); }
+.bg-flash { animation: flash-fade 2.6s ease-out forwards; }
+@keyframes flash-fade { 0%, 45% { background: rgba(52, 199, 89, 0.32); } 100% { background: rgba(52, 199, 89, 0); } }
 .is-active { background: rgba(0, 122, 255, 0.16); box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.16); }
 
 .score-strip {
@@ -555,6 +557,13 @@ dialog.sheet-wide { width: min(1180px, calc(100vw - 32px)); height: min(820px, c
   max-width: calc(100vw - 32px); text-align: center;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.has-action { display: flex; align-items: center; gap: 14px; padding-right: 8px; }
+.toast.show.has-action { pointer-events: auto; }
+.toast button {
+  border: 0; border-radius: 14px; height: 28px; padding: 0 12px;
+  background: rgba(255, 255, 255, 0.16); color: #64b5ff; font-size: 13.5px; font-weight: 600;
+}
+.toast button:hover { background: rgba(255, 255, 255, 0.26); }
 
 /* ── Smaller screens ── */
 @media (max-width: 1100px) {
@@ -708,6 +717,7 @@ dialog.sheet-wide { width: min(1180px, calc(100vw - 32px)); height: min(820px, c
 
       <h3 class="group-title">Template text</h3>
       <div class="group">
+        <div class="field no-rule" id="tpl-tidy-row" hidden><span class="row-main"><span class="row-title">Clean the text first</span><span class="row-sub">Tidies spaces, quotes and capitals before saving</span></span><label class="switch"><input type="checkbox" id="tpl-tidy" checked aria-label="Clean the text first"><span></span></label></div>
         <textarea id="tpl-text" rows="10"></textarea>
         <p class="group-note" id="tpl-text-note">Blanks look like {{Customer name}}. You can edit the text here before saving.</p>
       </div>
@@ -51579,6 +51589,559 @@ zymurgy/M
   // src/app.js
   var import_nspell = __toESM(require_lib(), 1);
 
+  // node_modules/diff/lib/index.mjs
+  function Diff() {
+  }
+  Diff.prototype = {
+    diff: function diff(oldString, newString) {
+      var _options$timeout;
+      var options = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : {};
+      var callback = options.callback;
+      if (typeof options === "function") {
+        callback = options;
+        options = {};
+      }
+      var self = this;
+      function done(value) {
+        value = self.postProcess(value, options);
+        if (callback) {
+          setTimeout(function() {
+            callback(value);
+          }, 0);
+          return true;
+        } else {
+          return value;
+        }
+      }
+      oldString = this.castInput(oldString, options);
+      newString = this.castInput(newString, options);
+      oldString = this.removeEmpty(this.tokenize(oldString, options));
+      newString = this.removeEmpty(this.tokenize(newString, options));
+      var newLen = newString.length, oldLen = oldString.length;
+      var editLength = 1;
+      var maxEditLength = newLen + oldLen;
+      if (options.maxEditLength != null) {
+        maxEditLength = Math.min(maxEditLength, options.maxEditLength);
+      }
+      var maxExecutionTime = (_options$timeout = options.timeout) !== null && _options$timeout !== void 0 ? _options$timeout : Infinity;
+      var abortAfterTimestamp = Date.now() + maxExecutionTime;
+      var bestPath = [{
+        oldPos: -1,
+        lastComponent: void 0
+      }];
+      var newPos = this.extractCommon(bestPath[0], newString, oldString, 0, options);
+      if (bestPath[0].oldPos + 1 >= oldLen && newPos + 1 >= newLen) {
+        return done(buildValues(self, bestPath[0].lastComponent, newString, oldString, self.useLongestToken));
+      }
+      var minDiagonalToConsider = -Infinity, maxDiagonalToConsider = Infinity;
+      function execEditLength() {
+        for (var diagonalPath = Math.max(minDiagonalToConsider, -editLength); diagonalPath <= Math.min(maxDiagonalToConsider, editLength); diagonalPath += 2) {
+          var basePath = void 0;
+          var removePath = bestPath[diagonalPath - 1], addPath = bestPath[diagonalPath + 1];
+          if (removePath) {
+            bestPath[diagonalPath - 1] = void 0;
+          }
+          var canAdd = false;
+          if (addPath) {
+            var addPathNewPos = addPath.oldPos - diagonalPath;
+            canAdd = addPath && 0 <= addPathNewPos && addPathNewPos < newLen;
+          }
+          var canRemove = removePath && removePath.oldPos + 1 < oldLen;
+          if (!canAdd && !canRemove) {
+            bestPath[diagonalPath] = void 0;
+            continue;
+          }
+          if (!canRemove || canAdd && removePath.oldPos < addPath.oldPos) {
+            basePath = self.addToPath(addPath, true, false, 0, options);
+          } else {
+            basePath = self.addToPath(removePath, false, true, 1, options);
+          }
+          newPos = self.extractCommon(basePath, newString, oldString, diagonalPath, options);
+          if (basePath.oldPos + 1 >= oldLen && newPos + 1 >= newLen) {
+            return done(buildValues(self, basePath.lastComponent, newString, oldString, self.useLongestToken));
+          } else {
+            bestPath[diagonalPath] = basePath;
+            if (basePath.oldPos + 1 >= oldLen) {
+              maxDiagonalToConsider = Math.min(maxDiagonalToConsider, diagonalPath - 1);
+            }
+            if (newPos + 1 >= newLen) {
+              minDiagonalToConsider = Math.max(minDiagonalToConsider, diagonalPath + 1);
+            }
+          }
+        }
+        editLength++;
+      }
+      if (callback) {
+        (function exec() {
+          setTimeout(function() {
+            if (editLength > maxEditLength || Date.now() > abortAfterTimestamp) {
+              return callback();
+            }
+            if (!execEditLength()) {
+              exec();
+            }
+          }, 0);
+        })();
+      } else {
+        while (editLength <= maxEditLength && Date.now() <= abortAfterTimestamp) {
+          var ret = execEditLength();
+          if (ret) {
+            return ret;
+          }
+        }
+      }
+    },
+    addToPath: function addToPath(path, added, removed, oldPosInc, options) {
+      var last = path.lastComponent;
+      if (last && !options.oneChangePerToken && last.added === added && last.removed === removed) {
+        return {
+          oldPos: path.oldPos + oldPosInc,
+          lastComponent: {
+            count: last.count + 1,
+            added,
+            removed,
+            previousComponent: last.previousComponent
+          }
+        };
+      } else {
+        return {
+          oldPos: path.oldPos + oldPosInc,
+          lastComponent: {
+            count: 1,
+            added,
+            removed,
+            previousComponent: last
+          }
+        };
+      }
+    },
+    extractCommon: function extractCommon(basePath, newString, oldString, diagonalPath, options) {
+      var newLen = newString.length, oldLen = oldString.length, oldPos = basePath.oldPos, newPos = oldPos - diagonalPath, commonCount = 0;
+      while (newPos + 1 < newLen && oldPos + 1 < oldLen && this.equals(oldString[oldPos + 1], newString[newPos + 1], options)) {
+        newPos++;
+        oldPos++;
+        commonCount++;
+        if (options.oneChangePerToken) {
+          basePath.lastComponent = {
+            count: 1,
+            previousComponent: basePath.lastComponent,
+            added: false,
+            removed: false
+          };
+        }
+      }
+      if (commonCount && !options.oneChangePerToken) {
+        basePath.lastComponent = {
+          count: commonCount,
+          previousComponent: basePath.lastComponent,
+          added: false,
+          removed: false
+        };
+      }
+      basePath.oldPos = oldPos;
+      return newPos;
+    },
+    equals: function equals(left, right, options) {
+      if (options.comparator) {
+        return options.comparator(left, right);
+      } else {
+        return left === right || options.ignoreCase && left.toLowerCase() === right.toLowerCase();
+      }
+    },
+    removeEmpty: function removeEmpty(array) {
+      var ret = [];
+      for (var i = 0; i < array.length; i++) {
+        if (array[i]) {
+          ret.push(array[i]);
+        }
+      }
+      return ret;
+    },
+    castInput: function castInput(value) {
+      return value;
+    },
+    tokenize: function tokenize(value) {
+      return Array.from(value);
+    },
+    join: function join(chars) {
+      return chars.join("");
+    },
+    postProcess: function postProcess(changeObjects) {
+      return changeObjects;
+    }
+  };
+  function buildValues(diff2, lastComponent, newString, oldString, useLongestToken) {
+    var components = [];
+    var nextComponent;
+    while (lastComponent) {
+      components.push(lastComponent);
+      nextComponent = lastComponent.previousComponent;
+      delete lastComponent.previousComponent;
+      lastComponent = nextComponent;
+    }
+    components.reverse();
+    var componentPos = 0, componentLen = components.length, newPos = 0, oldPos = 0;
+    for (; componentPos < componentLen; componentPos++) {
+      var component = components[componentPos];
+      if (!component.removed) {
+        if (!component.added && useLongestToken) {
+          var value = newString.slice(newPos, newPos + component.count);
+          value = value.map(function(value2, i) {
+            var oldValue = oldString[oldPos + i];
+            return oldValue.length > value2.length ? oldValue : value2;
+          });
+          component.value = diff2.join(value);
+        } else {
+          component.value = diff2.join(newString.slice(newPos, newPos + component.count));
+        }
+        newPos += component.count;
+        if (!component.added) {
+          oldPos += component.count;
+        }
+      } else {
+        component.value = diff2.join(oldString.slice(oldPos, oldPos + component.count));
+        oldPos += component.count;
+      }
+    }
+    return components;
+  }
+  var characterDiff = new Diff();
+  function longestCommonPrefix(str1, str2) {
+    var i;
+    for (i = 0; i < str1.length && i < str2.length; i++) {
+      if (str1[i] != str2[i]) {
+        return str1.slice(0, i);
+      }
+    }
+    return str1.slice(0, i);
+  }
+  function longestCommonSuffix(str1, str2) {
+    var i;
+    if (!str1 || !str2 || str1[str1.length - 1] != str2[str2.length - 1]) {
+      return "";
+    }
+    for (i = 0; i < str1.length && i < str2.length; i++) {
+      if (str1[str1.length - (i + 1)] != str2[str2.length - (i + 1)]) {
+        return str1.slice(-i);
+      }
+    }
+    return str1.slice(-i);
+  }
+  function replacePrefix(string, oldPrefix, newPrefix) {
+    if (string.slice(0, oldPrefix.length) != oldPrefix) {
+      throw Error("string ".concat(JSON.stringify(string), " doesn't start with prefix ").concat(JSON.stringify(oldPrefix), "; this is a bug"));
+    }
+    return newPrefix + string.slice(oldPrefix.length);
+  }
+  function replaceSuffix(string, oldSuffix, newSuffix) {
+    if (!oldSuffix) {
+      return string + newSuffix;
+    }
+    if (string.slice(-oldSuffix.length) != oldSuffix) {
+      throw Error("string ".concat(JSON.stringify(string), " doesn't end with suffix ").concat(JSON.stringify(oldSuffix), "; this is a bug"));
+    }
+    return string.slice(0, -oldSuffix.length) + newSuffix;
+  }
+  function removePrefix(string, oldPrefix) {
+    return replacePrefix(string, oldPrefix, "");
+  }
+  function removeSuffix(string, oldSuffix) {
+    return replaceSuffix(string, oldSuffix, "");
+  }
+  function maximumOverlap(string1, string2) {
+    return string2.slice(0, overlapCount(string1, string2));
+  }
+  function overlapCount(a, b) {
+    var startA = 0;
+    if (a.length > b.length) {
+      startA = a.length - b.length;
+    }
+    var endB = b.length;
+    if (a.length < b.length) {
+      endB = a.length;
+    }
+    var map = Array(endB);
+    var k = 0;
+    map[0] = 0;
+    for (var j = 1; j < endB; j++) {
+      if (b[j] == b[k]) {
+        map[j] = map[k];
+      } else {
+        map[j] = k;
+      }
+      while (k > 0 && b[j] != b[k]) {
+        k = map[k];
+      }
+      if (b[j] == b[k]) {
+        k++;
+      }
+    }
+    k = 0;
+    for (var i = startA; i < a.length; i++) {
+      while (k > 0 && a[i] != b[k]) {
+        k = map[k];
+      }
+      if (a[i] == b[k]) {
+        k++;
+      }
+    }
+    return k;
+  }
+  var extendedWordChars = "a-zA-Z0-9_\\u{C0}-\\u{FF}\\u{D8}-\\u{F6}\\u{F8}-\\u{2C6}\\u{2C8}-\\u{2D7}\\u{2DE}-\\u{2FF}\\u{1E00}-\\u{1EFF}";
+  var tokenizeIncludingWhitespace = new RegExp("[".concat(extendedWordChars, "]+|\\s+|[^").concat(extendedWordChars, "]"), "ug");
+  var wordDiff = new Diff();
+  wordDiff.equals = function(left, right, options) {
+    if (options.ignoreCase) {
+      left = left.toLowerCase();
+      right = right.toLowerCase();
+    }
+    return left.trim() === right.trim();
+  };
+  wordDiff.tokenize = function(value) {
+    var options = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {};
+    var parts;
+    if (options.intlSegmenter) {
+      if (options.intlSegmenter.resolvedOptions().granularity != "word") {
+        throw new Error('The segmenter passed must have a granularity of "word"');
+      }
+      parts = Array.from(options.intlSegmenter.segment(value), function(segment) {
+        return segment.segment;
+      });
+    } else {
+      parts = value.match(tokenizeIncludingWhitespace) || [];
+    }
+    var tokens = [];
+    var prevPart = null;
+    parts.forEach(function(part) {
+      if (/\s/.test(part)) {
+        if (prevPart == null) {
+          tokens.push(part);
+        } else {
+          tokens.push(tokens.pop() + part);
+        }
+      } else if (/\s/.test(prevPart)) {
+        if (tokens[tokens.length - 1] == prevPart) {
+          tokens.push(tokens.pop() + part);
+        } else {
+          tokens.push(prevPart + part);
+        }
+      } else {
+        tokens.push(part);
+      }
+      prevPart = part;
+    });
+    return tokens;
+  };
+  wordDiff.join = function(tokens) {
+    return tokens.map(function(token, i) {
+      if (i == 0) {
+        return token;
+      } else {
+        return token.replace(/^\s+/, "");
+      }
+    }).join("");
+  };
+  wordDiff.postProcess = function(changes, options) {
+    if (!changes || options.oneChangePerToken) {
+      return changes;
+    }
+    var lastKeep = null;
+    var insertion = null;
+    var deletion = null;
+    changes.forEach(function(change) {
+      if (change.added) {
+        insertion = change;
+      } else if (change.removed) {
+        deletion = change;
+      } else {
+        if (insertion || deletion) {
+          dedupeWhitespaceInChangeObjects(lastKeep, deletion, insertion, change);
+        }
+        lastKeep = change;
+        insertion = null;
+        deletion = null;
+      }
+    });
+    if (insertion || deletion) {
+      dedupeWhitespaceInChangeObjects(lastKeep, deletion, insertion, null);
+    }
+    return changes;
+  };
+  function dedupeWhitespaceInChangeObjects(startKeep, deletion, insertion, endKeep) {
+    if (deletion && insertion) {
+      var oldWsPrefix = deletion.value.match(/^\s*/)[0];
+      var oldWsSuffix = deletion.value.match(/\s*$/)[0];
+      var newWsPrefix = insertion.value.match(/^\s*/)[0];
+      var newWsSuffix = insertion.value.match(/\s*$/)[0];
+      if (startKeep) {
+        var commonWsPrefix = longestCommonPrefix(oldWsPrefix, newWsPrefix);
+        startKeep.value = replaceSuffix(startKeep.value, newWsPrefix, commonWsPrefix);
+        deletion.value = removePrefix(deletion.value, commonWsPrefix);
+        insertion.value = removePrefix(insertion.value, commonWsPrefix);
+      }
+      if (endKeep) {
+        var commonWsSuffix = longestCommonSuffix(oldWsSuffix, newWsSuffix);
+        endKeep.value = replacePrefix(endKeep.value, newWsSuffix, commonWsSuffix);
+        deletion.value = removeSuffix(deletion.value, commonWsSuffix);
+        insertion.value = removeSuffix(insertion.value, commonWsSuffix);
+      }
+    } else if (insertion) {
+      if (startKeep) {
+        insertion.value = insertion.value.replace(/^\s*/, "");
+      }
+      if (endKeep) {
+        endKeep.value = endKeep.value.replace(/^\s*/, "");
+      }
+    } else if (startKeep && endKeep) {
+      var newWsFull = endKeep.value.match(/^\s*/)[0], delWsStart = deletion.value.match(/^\s*/)[0], delWsEnd = deletion.value.match(/\s*$/)[0];
+      var newWsStart = longestCommonPrefix(newWsFull, delWsStart);
+      deletion.value = removePrefix(deletion.value, newWsStart);
+      var newWsEnd = longestCommonSuffix(removePrefix(newWsFull, newWsStart), delWsEnd);
+      deletion.value = removeSuffix(deletion.value, newWsEnd);
+      endKeep.value = replacePrefix(endKeep.value, newWsFull, newWsEnd);
+      startKeep.value = replaceSuffix(startKeep.value, newWsFull, newWsFull.slice(0, newWsFull.length - newWsEnd.length));
+    } else if (endKeep) {
+      var endKeepWsPrefix = endKeep.value.match(/^\s*/)[0];
+      var deletionWsSuffix = deletion.value.match(/\s*$/)[0];
+      var overlap = maximumOverlap(deletionWsSuffix, endKeepWsPrefix);
+      deletion.value = removeSuffix(deletion.value, overlap);
+    } else if (startKeep) {
+      var startKeepWsSuffix = startKeep.value.match(/\s*$/)[0];
+      var deletionWsPrefix = deletion.value.match(/^\s*/)[0];
+      var _overlap = maximumOverlap(startKeepWsSuffix, deletionWsPrefix);
+      deletion.value = removePrefix(deletion.value, _overlap);
+    }
+  }
+  var wordWithSpaceDiff = new Diff();
+  wordWithSpaceDiff.tokenize = function(value) {
+    var regex = new RegExp("(\\r?\\n)|[".concat(extendedWordChars, "]+|[^\\S\\n\\r]+|[^").concat(extendedWordChars, "]"), "ug");
+    return value.match(regex) || [];
+  };
+  function diffWordsWithSpace(oldStr, newStr, options) {
+    return wordWithSpaceDiff.diff(oldStr, newStr, options);
+  }
+  var lineDiff = new Diff();
+  lineDiff.tokenize = function(value, options) {
+    if (options.stripTrailingCr) {
+      value = value.replace(/\r\n/g, "\n");
+    }
+    var retLines = [], linesAndNewlines = value.split(/(\n|\r\n)/);
+    if (!linesAndNewlines[linesAndNewlines.length - 1]) {
+      linesAndNewlines.pop();
+    }
+    for (var i = 0; i < linesAndNewlines.length; i++) {
+      var line = linesAndNewlines[i];
+      if (i % 2 && !options.newlineIsToken) {
+        retLines[retLines.length - 1] += line;
+      } else {
+        retLines.push(line);
+      }
+    }
+    return retLines;
+  };
+  lineDiff.equals = function(left, right, options) {
+    if (options.ignoreWhitespace) {
+      if (!options.newlineIsToken || !left.includes("\n")) {
+        left = left.trim();
+      }
+      if (!options.newlineIsToken || !right.includes("\n")) {
+        right = right.trim();
+      }
+    } else if (options.ignoreNewlineAtEof && !options.newlineIsToken) {
+      if (left.endsWith("\n")) {
+        left = left.slice(0, -1);
+      }
+      if (right.endsWith("\n")) {
+        right = right.slice(0, -1);
+      }
+    }
+    return Diff.prototype.equals.call(this, left, right, options);
+  };
+  var sentenceDiff = new Diff();
+  sentenceDiff.tokenize = function(value) {
+    return value.split(/(\S.+?[.!?])(?=\s+|$)/);
+  };
+  var cssDiff = new Diff();
+  cssDiff.tokenize = function(value) {
+    return value.split(/([{}:;,]|\s+)/);
+  };
+  function _typeof(o) {
+    "@babel/helpers - typeof";
+    return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o2) {
+      return typeof o2;
+    } : function(o2) {
+      return o2 && "function" == typeof Symbol && o2.constructor === Symbol && o2 !== Symbol.prototype ? "symbol" : typeof o2;
+    }, _typeof(o);
+  }
+  var jsonDiff = new Diff();
+  jsonDiff.useLongestToken = true;
+  jsonDiff.tokenize = lineDiff.tokenize;
+  jsonDiff.castInput = function(value, options) {
+    var undefinedReplacement = options.undefinedReplacement, _options$stringifyRep = options.stringifyReplacer, stringifyReplacer = _options$stringifyRep === void 0 ? function(k, v) {
+      return typeof v === "undefined" ? undefinedReplacement : v;
+    } : _options$stringifyRep;
+    return typeof value === "string" ? value : JSON.stringify(canonicalize(value, null, null, stringifyReplacer), stringifyReplacer, "  ");
+  };
+  jsonDiff.equals = function(left, right, options) {
+    return Diff.prototype.equals.call(jsonDiff, left.replace(/,([\r\n])/g, "$1"), right.replace(/,([\r\n])/g, "$1"), options);
+  };
+  function canonicalize(obj, stack, replacementStack, replacer, key) {
+    stack = stack || [];
+    replacementStack = replacementStack || [];
+    if (replacer) {
+      obj = replacer(key, obj);
+    }
+    var i;
+    for (i = 0; i < stack.length; i += 1) {
+      if (stack[i] === obj) {
+        return replacementStack[i];
+      }
+    }
+    var canonicalizedObj;
+    if ("[object Array]" === Object.prototype.toString.call(obj)) {
+      stack.push(obj);
+      canonicalizedObj = new Array(obj.length);
+      replacementStack.push(canonicalizedObj);
+      for (i = 0; i < obj.length; i += 1) {
+        canonicalizedObj[i] = canonicalize(obj[i], stack, replacementStack, replacer, key);
+      }
+      stack.pop();
+      replacementStack.pop();
+      return canonicalizedObj;
+    }
+    if (obj && obj.toJSON) {
+      obj = obj.toJSON();
+    }
+    if (_typeof(obj) === "object" && obj !== null) {
+      stack.push(obj);
+      canonicalizedObj = {};
+      replacementStack.push(canonicalizedObj);
+      var sortedKeys = [], _key;
+      for (_key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, _key)) {
+          sortedKeys.push(_key);
+        }
+      }
+      sortedKeys.sort();
+      for (i = 0; i < sortedKeys.length; i += 1) {
+        _key = sortedKeys[i];
+        canonicalizedObj[_key] = canonicalize(obj[_key], stack, replacementStack, replacer, _key);
+      }
+      stack.pop();
+      replacementStack.pop();
+    } else {
+      canonicalizedObj = obj;
+    }
+    return canonicalizedObj;
+  }
+  var arrayDiff = new Diff();
+  arrayDiff.tokenize = function(value) {
+    return value.slice();
+  };
+  arrayDiff.join = arrayDiff.removeEmpty = function(value) {
+    return value;
+  };
+
   // src/rules.js
   var FILLER = [
     "just",
@@ -51847,6 +52410,9 @@ Kind regards,
       placeholder: true
     },
     checkCapitalised: false,
+    clean: null,
+    // filled from DEFAULT_CLEAN; each Clean step can be switched off
+    cleanOnPaste: false,
     disabledRules: [],
     avoid: AVOID_DEFAULT
   };
@@ -51862,7 +52428,7 @@ Kind regards,
     long: { name: "Long sentence", tone: "yellow" }
   };
   var L = "\\p{L}\\p{M}";
-  var ABBREVIATIONS = /* @__PURE__ */ new Set(["e.g", "i.e", "etc", "approx", "incl", "vs", "no", "cf", "ca", "mr", "mrs", "ms", "dr", "st", "ltd", "co", "ph", "tel", "attn", "ref", "nb", "p", "pp", "eg", "ie"]);
+  var ABBREVIATIONS = /* @__PURE__ */ new Set(["e.g", "i.e", "etc", "approx", "incl", "vs", "no", "cf", "ca", "mr", "mrs", "ms", "dr", "st", "ltd", "co", "ph", "tel", "attn", "ref", "nb", "p", "pp", "eg", "ie", "a.m", "p.m", "am", "pm", "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec"]);
   var DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
   var MONTHS = ["january", "february", "april", "june", "july", "august", "september", "october", "november", "december"];
   function escapeRegex(s) {
@@ -51953,46 +52519,157 @@ Kind regards,
     }
     return false;
   }
+  var CLEAN_STEPS = [
+    { key: "spaces", name: "Extra spaces", sub: "Double spaces, spaces at line ends, space before a comma" },
+    { key: "punctuation", name: "Missing spaces and doubled marks", sub: "“Hi,thanks” → “Hi, thanks”, “,,” → “,”" },
+    { key: "lineBreaks", name: "Broken lines", sub: "Rejoins lines split by pasting from email or PDF" },
+    { key: "blankLines", name: "Extra blank lines", sub: "Keeps one blank line between paragraphs" },
+    { key: "apostrophes", name: "Missing apostrophes", sub: "“dont” → “don’t”, “im” → “I’m”" },
+    { key: "bullets", name: "Bullets", sub: "One bullet style" },
+    { key: "dashes", name: "Dashes", sub: "One dash style between words" },
+    { key: "quotes", name: "Quote marks", sub: "One quote style" },
+    { key: "capitals", name: "Capital letters", sub: "Sentence starts, the word I, days and months" }
+  ];
+  var DEFAULT_CLEAN = Object.fromEntries(CLEAN_STEPS.map((s) => [s.key, true]));
+  var APOSTROPHE_FIXES = {
+    dont: "don't",
+    doesnt: "doesn't",
+    didnt: "didn't",
+    isnt: "isn't",
+    arent: "aren't",
+    wasnt: "wasn't",
+    werent: "weren't",
+    cant: "can't",
+    couldnt: "couldn't",
+    wouldnt: "wouldn't",
+    shouldnt: "shouldn't",
+    wont: "won't",
+    havent: "haven't",
+    hasnt: "hasn't",
+    hadnt: "hadn't",
+    mustnt: "mustn't",
+    neednt: "needn't",
+    im: "I'm",
+    ive: "I've",
+    youre: "you're",
+    youve: "you've",
+    youll: "you'll",
+    youd: "you'd",
+    theyre: "they're",
+    theyve: "they've",
+    theyll: "they'll",
+    weve: "we've",
+    shes: "she's",
+    hes: "he's",
+    thats: "that's",
+    whats: "what's",
+    wheres: "where's",
+    theres: "there's",
+    heres: "here's",
+    whos: "who's"
+  };
+  var PROTECT_RE = /\{\{[^{}\n]*\}\}|[\w.+-]+@[\w-]+(?:\.[\w-]+)+|https?:\/\/\S+|www\.\S+/g;
+  function protect(text) {
+    const kept = [];
+    const masked = text.replace(PROTECT_RE, (m) => {
+      const trail = m.match(/[.,;:!?)]+$/);
+      const core = trail && !m.startsWith("{{") ? m.slice(0, -trail[0].length) : m;
+      kept.push(core);
+      return `${kept.length - 1}` + (core.length < m.length ? m.slice(core.length) : "");
+    });
+    return { masked, restore: (t) => t.replace(/(\d+)/g, (m, i) => kept[Number(i)]) };
+  }
   function clean(input, settings = DEFAULT_SETTINGS) {
+    const on = { ...DEFAULT_CLEAN, ...settings.clean || {} };
     const counts = {};
     const bump = (k, n) => {
       if (n) counts[k] = (counts[k] || 0) + n;
     };
-    let t = input;
+    const { masked, restore } = protect(input.replace(/\r\n?/g, "\n").replace(/ /g, " "));
+    let t = masked;
     const count = (re) => (t.match(re) || []).length;
-    t = t.replace(/\r\n?/g, "\n").replace(/ /g, " ");
-    bump("spaces", count(/[ \t]+$/gm));
-    t = t.replace(/[ \t]+$/gm, "");
-    bump("spaces", count(/^ +(?=\S)/gm));
-    t = t.replace(/^ +(?=\S)/gm, "");
-    bump("spaces", count(/(\S) {2,}/g));
-    t = t.replace(/(\S) {2,}/g, "$1 ");
-    bump("spaces", count(/(\S) +([,.;:!?])(?=\s|$)/g));
-    t = t.replace(/(\S) +([,.;:!?])(?=\s|$)/g, "$1$2");
-    const lines = t.split("\n");
-    const isBullet = (s) => /^\s*([*•·◦‣▪●–-]\s|\d+[.)]\s)/.test(s);
-    const merged = [];
-    let joins = 0;
-    for (let i = 0; i < lines.length; i++) {
-      let line = lines[i];
-      while (i + 1 < lines.length && line.trim() !== "" && lines[i + 1].trim() !== "" && !isBullet(lines[i + 1]) && !/[.!?:;,]["”’)]?$/.test(line) && /^[a-z(]/.test(lines[i + 1])) {
-        if (/[a-z]-$/.test(line)) line = line.slice(0, -1) + lines[i + 1];
-        else line = line + " " + lines[i + 1];
-        i++;
-        joins++;
-      }
-      merged.push(line);
+    if (on.spaces) {
+      bump("spaces", count(/[ \t]+$/gm));
+      t = t.replace(/[ \t]+$/gm, "");
+      bump("spaces", count(/^ +(?=\S)/gm));
+      t = t.replace(/^ +(?=\S)/gm, "");
+      bump("spaces", count(/(\S) {2,}/g));
+      t = t.replace(/(\S) {2,}/g, "$1 ");
+      bump("spaces", count(/(\S) +([,;:!?]|\.(?!\.))(?=\s|$)/g));
+      t = t.replace(/(\S) +([,;:!?]|\.(?!\.))(?=\s|$)/g, "$1$2");
     }
-    bump("lineBreaks", joins);
-    t = merged.join("\n");
-    bump("blankLines", count(/\n{3,}/g));
-    t = t.replace(/\n{3,}/g, "\n\n");
-    const b = settings.bullets || "•";
-    t = t.replace(/^([*•·◦‣▪●–]|-)[ \t]+/gm, (m, mark) => {
-      if (mark !== b) bump("bullets", 1);
-      return b + " ";
-    });
-    if (settings.dashes !== "keep") {
+    if (on.apostrophes) {
+      const re = new RegExp(`\\b(${Object.keys(APOSTROPHE_FIXES).join("|")})\\b`, "gi");
+      t = t.replace(re, (m) => {
+        if (m === m.toUpperCase() && m.length > 2) return m;
+        bump("apostrophes", 1);
+        let fix = APOSTROPHE_FIXES[m.toLowerCase()];
+        if (on.quotes && settings.quotes === "curly") fix = fix.replace("'", "’");
+        return /^I['’]/.test(fix) ? fix : new RegExp("^\\p{Lu}", "u").test(m) ? fix.charAt(0).toUpperCase() + fix.slice(1) : fix;
+      });
+    }
+    if (on.punctuation) {
+      t = t.replace(/,{2,}/g, () => {
+        bump("punctuation", 1);
+        return ",";
+      });
+      t = t.replace(/([^.])\.\.(?!\.)/g, (m, p) => {
+        bump("punctuation", 1);
+        return p + ".";
+      });
+      t = t.replace(/\?{2,}/g, () => {
+        bump("punctuation", 1);
+        return "?";
+      });
+      t = t.replace(new RegExp(",(?=\\p{L})", "gu"), () => {
+        bump("punctuation", 1);
+        return ", ";
+      });
+      t = t.replace(new RegExp("(\\p{Ll}{2,})([.?!])(\\p{Lu})(?=\\p{Ll}|['’]\\p{Ll}|\\s)", "gu"), (m, w, p, n) => {
+        if (ABBREVIATIONS.has(w.toLowerCase())) return m;
+        bump("punctuation", 1);
+        return `${w}${p} ${n}`;
+      });
+    }
+    if (on.lineBreaks) {
+      const lines = t.split("\n");
+      const isBullet = (s) => /^\s*([*•·◦‣▪●–-]\s|\d+[.)]\s)/.test(s);
+      const blockMax = new Array(lines.length).fill(0);
+      for (let i = 0; i < lines.length; ) {
+        let j = i;
+        while (j < lines.length && lines[j].trim() !== "") j++;
+        const max = Math.max(0, ...lines.slice(i, j).map((l) => l.length));
+        for (let k = i; k < j; k++) blockMax[k] = max;
+        i = j + 1;
+      }
+      const merged = [];
+      let joins = 0;
+      for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+        const wrapAt = blockMax[i];
+        while (i + 1 < lines.length && line.trim() !== "" && lines[i + 1].trim() !== "" && !isBullet(lines[i + 1]) && !/[.!?:;,]["”’)]?$/.test(line) && /^[a-z(]/.test(lines[i + 1]) && lines[i].length >= 30 && lines[i].length >= wrapAt * 0.7) {
+          if (/[a-z]-$/.test(line)) line = line.slice(0, -1) + lines[i + 1];
+          else line = line + " " + lines[i + 1];
+          i++;
+          joins++;
+        }
+        merged.push(line);
+      }
+      bump("lineBreaks", joins);
+      t = merged.join("\n");
+    }
+    if (on.blankLines) {
+      bump("blankLines", count(/\n{3,}/g));
+      t = t.replace(/\n{3,}/g, "\n\n");
+    }
+    if (on.bullets) {
+      const b = settings.bullets || "•";
+      t = t.replace(/^([*•·◦‣▪●–]|-)[ \t]+/gm, (m, mark) => {
+        if (mark !== b) bump("bullets", 1);
+        return b + " ";
+      });
+    }
+    if (on.dashes && settings.dashes !== "keep") {
       const dash = settings.dashes === "em" ? "—" : " – ";
       const swap = (m, pre) => {
         const out = pre + dash;
@@ -52002,7 +52679,7 @@ Kind regards,
       t = t.replace(/(\S)[ \t]+(?:-{1,3}|–|—)[ \t]+(?=\S)/g, swap);
       t = t.replace(/([\p{L}\d])(?:-{2,3}|—)(?=[\p{L}\d])/gu, swap);
     }
-    if (settings.quotes === "curly") {
+    if (on.quotes && settings.quotes === "curly") {
       t = t.replace(/(^|[\s([{—–])"/gm, (m, p) => {
         bump("quotes", 1);
         return p + "“";
@@ -52023,7 +52700,7 @@ Kind regards,
         bump("quotes", 1);
         return "’";
       });
-    } else if (settings.quotes === "straight") {
+    } else if (on.quotes && settings.quotes === "straight") {
       t = t.replace(/[“”„]/g, () => {
         bump("quotes", 1);
         return '"';
@@ -52033,36 +52710,41 @@ Kind regards,
         return "'";
       });
     }
-    t = t.replace(/(^|[\s(“"‘'])i(?=['’](?:m|ve|ll|d)\b|[\s,!?;:)]|\.(?!e\.)|$)/gm, (m, p) => {
-      bump("capitals", 1);
-      return p + "I";
-    });
-    const dm = new RegExp(`\\b(${DAYS.concat(MONTHS).join("|")})\\b`, "g");
-    t = t.replace(dm, (m) => {
-      bump("capitals", 1);
-      return capFirst(m);
-    });
-    t = t.replace(/^((?:[•–-]\s+)?[“"‘'(]?)([a-z])(\S*)/gm, (m, pre, ch, rest) => {
-      if (/[@/.\d:]/.test(rest) || /^(www|http)/i.test(ch + rest)) return m;
-      bump("capitals", 1);
-      return pre + ch.toUpperCase() + rest;
-    });
-    t = t.replace(/([.!?])(["”’)]?[ \t]+)([a-z])/g, (m, end, gap, ch, offset) => {
-      if (end === ".") {
-        const w = wordBefore(t, offset);
-        if (ABBREVIATIONS.has(w)) return m;
-      }
-      bump("capitals", 1);
-      return end + gap + ch.toUpperCase();
-    });
+    if (on.capitals) {
+      t = t.replace(/(^|[\s(“"‘'])i(?=['’](?:m|ve|ll|d)\b|[\s,!?;:)]|\.(?!e\.)|$)/gm, (m, p) => {
+        bump("capitals", 1);
+        return p + "I";
+      });
+      const dm = new RegExp(`\\b(${DAYS.concat(MONTHS).join("|")})\\b`, "g");
+      t = t.replace(dm, (m) => {
+        bump("capitals", 1);
+        return capFirst(m);
+      });
+      t = t.replace(/^((?:[•–-]\s+)?[“"‘'(]?)([a-z])(\S*)/gm, (m, pre, ch, rest) => {
+        if (/[@/.\d:]/.test(rest) || /^(www|http)/i.test(ch + rest)) return m;
+        bump("capitals", 1);
+        return pre + ch.toUpperCase() + rest;
+      });
+      t = t.replace(/([.!?])(["”’)]?[ \t]+)([a-z])/g, (m, end, gap, ch, offset) => {
+        if (end === ".") {
+          if (t[offset - 1] === ".") return m;
+          const w = wordBefore(t, offset);
+          if (ABBREVIATIONS.has(w)) return m;
+        }
+        bump("capitals", 1);
+        return end + gap + ch.toUpperCase();
+      });
+    }
     t = t.replace(/^\n+/, "").replace(/\s+$/, "");
-    return { text: t, counts };
+    return { text: restore(t), counts };
   }
   function describeClean(counts) {
     const names = {
       spaces: ["extra space", "extra spaces"],
+      punctuation: ["spacing or punctuation fix", "spacing or punctuation fixes"],
       lineBreaks: ["broken line rejoined", "broken lines rejoined"],
       blankLines: ["run of blank lines", "runs of blank lines"],
+      apostrophes: ["missing apostrophe", "missing apostrophes"],
       bullets: ["bullet", "bullets"],
       dashes: ["dash", "dashes"],
       quotes: ["quote mark", "quote marks"],
@@ -52366,9 +53048,10 @@ Kind regards,
       if (under) cls.push("u-" + under);
       if (cats.has("long")) cls.push("bg-long");
       if (cats.has("placeholder")) cls.push("bg-fill");
+      if (cats.has("flash")) cls.push("bg-flash");
       if (activeId && covering.some((i) => i.id === activeId)) cls.push("is-active");
-      const top = covering.filter((i) => i.category !== "long").sort((a, b) => a.end - a.start - (b.end - b.start))[0] || covering[0];
-      html += `<span class="${cls.join(" ")}" data-issue="${top.id}">${chunk}</span>`;
+      const top = covering.filter((i) => i.category !== "long" && i.category !== "flash").sort((a, b) => a.end - a.start - (b.end - b.start))[0] || covering.find((i) => i.category === "long");
+      html += `<span class="${cls.join(" ")}"${top ? ` data-issue="${top.id}"` : ""}>${chunk}</span>`;
     }
     return html + "\n ";
   }
@@ -52612,6 +53295,21 @@ Kind regards,
     while (m = PLACEHOLDER_RE.exec(text)) out.push(m[1].trim());
     return out;
   }
+  function addedRanges(diffParts) {
+    const out = [];
+    let pos = 0;
+    for (const part of diffParts) {
+      if (part.removed) continue;
+      const end = pos + part.value.length;
+      if (part.added) {
+        const s = pos + (part.value.length - part.value.trimStart().length);
+        const e = end - (part.value.length - part.value.trimEnd().length);
+        out.push([s, e > s ? e : end]);
+      }
+      pos = end;
+    }
+    return out;
+  }
 
   // src/app.js
   var VERSION = "1.0.0";
@@ -52660,6 +53358,7 @@ Kind regards,
       ...DEFAULT_SETTINGS,
       ...saved,
       checks: { ...DEFAULT_SETTINGS.checks, ...saved.checks || {} },
+      clean: { ...DEFAULT_CLEAN, ...saved.clean || {} },
       avoid: Array.isArray(saved.avoid) ? saved.avoid : AVOID_DEFAULT.map((a) => ({ ...a })),
       disabledRules: Array.isArray(saved.disabledRules) ? saved.disabledRules : []
     };
@@ -52678,6 +53377,7 @@ Kind regards,
     checker: null,
     suggestions: /* @__PURE__ */ new Map(),
     history: [],
+    flash: [],
     caret: { start: 0, end: 0 },
     save: null,
     lib: { query: "", filter: { kind: "all" }, selectedId: null, mode: "view", confirm: null }
@@ -52696,14 +53396,25 @@ Kind regards,
   var dateFmt = new Intl.DateTimeFormat("en-NZ", { day: "numeric", month: "short", year: "numeric" });
   var dateTimeFmt = new Intl.DateTimeFormat("en-NZ", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
   var toastTimer;
-  function toast(msg) {
+  function toast(msg, action = null) {
     const el = $("#toast");
     const host = document.querySelector("dialog[open]") || document.body;
     if (el.parentNode !== host) host.appendChild(el);
     el.textContent = msg;
+    el.classList.toggle("has-action", !!action);
+    if (action) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = action.label;
+      b.addEventListener("click", () => {
+        el.classList.remove("show");
+        action.run();
+      });
+      el.appendChild(b);
+    }
     el.classList.add("show");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+    toastTimer = setTimeout(() => el.classList.remove("show"), action ? 6e3 : 2600);
   }
   function replaceRange(start2, end, str, { record = true } = {}) {
     const before = ta.value;
@@ -52803,7 +53514,25 @@ Kind regards,
     queueSuggestions();
   }
   function renderHighlights() {
-    backdrop.innerHTML = highlightHtml(ta.value, state.issues, state.activeId);
+    backdrop.innerHTML = highlightHtml(ta.value, state.flash.length ? state.issues.concat(state.flash) : state.issues, state.activeId);
+  }
+  var flashTimer;
+  function flashChanges(before, after) {
+    clearTimeout(flashTimer);
+    state.flash = [];
+    if (before.length + after.length > 8e4) return;
+    let ranges = [];
+    try {
+      ranges = addedRanges(diffWordsWithSpace(before, after));
+    } catch {
+      ranges = [];
+    }
+    state.flash = ranges.slice(0, 400).map(([start2, end], n) => ({ id: "flash" + n, category: "flash", start: start2, end, text: "" }));
+    renderHighlights();
+    flashTimer = setTimeout(() => {
+      state.flash = [];
+      renderHighlights();
+    }, 2600);
   }
   function updateButtons() {
     const has = ta.value.trim().length > 0;
@@ -53104,16 +53833,19 @@ Kind regards,
     const b = e.target.closest("button");
     if (b) setPanel(b.dataset.panel);
   });
-  $("#btn-clean").addEventListener("click", () => {
-    const res = clean(ta.value, state.settings);
-    if (res.text === ta.value) {
-      toast("Already clean");
+  function doClean({ quiet = false } = {}) {
+    const before = ta.value;
+    const res = clean(before, state.settings);
+    if (res.text === before) {
+      if (!quiet) toast("Already clean");
       return;
     }
     state.activeRef = null;
     setAll(res.text);
-    toast(describeClean(res.counts));
-  });
+    flashChanges(before, res.text);
+    toast(describeClean(res.counts), { label: "Undo", run: undo });
+  }
+  $("#btn-clean").addEventListener("click", () => doClean());
   $("#btn-undo").addEventListener("click", undo);
   async function copyText(text) {
     try {
@@ -53162,7 +53894,17 @@ Kind regards,
     setType(s.id === "complaint" ? "complaint" : "email");
     scroller.scrollTop = 0;
   });
-  ta.addEventListener("input", () => onTextChanged());
+  ta.addEventListener("input", () => {
+    if (state.flash.length) {
+      clearTimeout(flashTimer);
+      state.flash = [];
+    }
+    onTextChanged();
+  });
+  ta.addEventListener("paste", () => {
+    if (!state.settings.cleanOnPaste) return;
+    setTimeout(() => doClean({ quiet: true }), 0);
+  });
   function syncCaret() {
     const pos = ta.selectionStart;
     if (ta.selectionEnd - pos > 0 && state.issues.some((i) => i.id === state.activeId && i.start === pos)) return;
@@ -53262,15 +54004,31 @@ Kind regards,
   var saveSheet = $("#save-sheet");
   var saveLabelsBound = false;
   $("#btn-save").addEventListener("click", openSave);
+  function saveSource() {
+    const raw = state.save.raw;
+    return state.save.tidy ? clean(raw, state.settings).text : raw;
+  }
+  function refreshSaveText() {
+    state.save.source = saveSource();
+    state.save.detections = findPersonalDetails(state.save.source);
+    state.save.enabled = new Set(state.save.detections.map((d) => d.id));
+    state.save.edited = false;
+    renderRedactions();
+    $("#tpl-text").value = applyRedactions(state.save.source, state.save.detections, [...state.save.enabled]);
+  }
   function openSave() {
     const text = ta.value.trim();
     if (!text) {
       toast("Write a message first");
       return;
     }
-    const detections = findPersonalDetails(text);
+    const tidy = clean(text, state.settings).text !== text;
+    const source = tidy ? clean(text, state.settings).text : text;
+    const detections = findPersonalDetails(source);
     state.save = {
-      source: text,
+      raw: text,
+      tidy,
+      source,
       detections,
       enabled: new Set(detections.map((d) => d.id)),
       type: state.type,
@@ -53291,7 +54049,9 @@ Kind regards,
       saveLabelsBound = true;
     }
     renderRedactions();
-    $("#tpl-text").value = applyRedactions(text, detections, [...state.save.enabled]);
+    $("#tpl-text").value = applyRedactions(source, detections, [...state.save.enabled]);
+    $("#tpl-tidy-row").hidden = !tidy;
+    $("#tpl-tidy").checked = tidy;
     const open = state.issues.filter((i) => i.category !== "placeholder").length;
     $("#tpl-text-note").textContent = open ? `This message still has ${plural(open, "suggestion")}. You can save it anyway, or cancel and fix them first.` : "Blanks look like {{Customer name}}. You can edit the text here before saving.";
     saveSheet.showModal();
@@ -53319,6 +54079,11 @@ Kind regards,
   });
   $("#tpl-text").addEventListener("input", () => {
     if (state.save) state.save.edited = true;
+  });
+  $("#tpl-tidy").addEventListener("change", (e) => {
+    if (state.save.edited) toast("Your edits to the template text were replaced");
+    state.save.tidy = e.target.checked;
+    refreshSaveText();
   });
   $("#save-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -53703,6 +54468,12 @@ Kind regards,
       <div class="field"><span class="field-label">Quote marks</span>${seg("quotes", s.quotes, [["curly", "“Curly”"], ["straight", '"Straight"'], ["keep", "Leave"]])}</div>
       <div class="field"><span class="field-label">Dashes</span>${seg("dashes", s.dashes, [["en", "Spaced –"], ["em", "Em —"], ["keep", "Leave"]])}</div>
       <div class="field"><span class="field-label">Bullets</span>${seg("bullets", s.bullets, [["•", "•"], ["–", "–"], ["-", "-"]])}</div>
+      <div class="field"><span class="row-main"><span class="row-title">Clean when I paste</span><span class="row-sub">Runs Clean straight after you paste text</span></span><label class="switch"><input type="checkbox" data-flag="cleanOnPaste" ${s.cleanOnPaste ? "checked" : ""} aria-label="Clean when I paste"><span></span></label></div>
+    </div>
+
+    <h3 class="group-title">What Clean fixes</h3>
+    <div class="group">
+      ${CLEAN_STEPS.map((c) => `<div class="field"><span class="row-main"><span class="row-title">${esc(c.name)}</span><span class="row-sub">${esc(c.sub)}</span></span><label class="switch"><input type="checkbox" data-clean="${c.key}" ${s.clean[c.key] ? "checked" : ""} aria-label="${esc(c.name)}"><span></span></label></div>`).join("")}
     </div>
 
     <h3 class="group-title">Checks</h3>
@@ -53842,6 +54613,12 @@ Kind regards,
   }
   $("#settings-body").addEventListener("change", (e) => {
     const s = state.settings;
+    const cleanBox = e.target.closest("[data-clean]");
+    if (cleanBox) {
+      s.clean[cleanBox.dataset.clean] = cleanBox.checked;
+      saveSettings();
+      return;
+    }
     const check2 = e.target.closest("[data-check]");
     if (check2) {
       s.checks[check2.dataset.check] = check2.checked;

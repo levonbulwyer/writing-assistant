@@ -222,6 +222,8 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .u-wordy, .u-filler, .u-passive { text-decoration: underline rgba(0, 122, 255, 0.75); }
 .bg-long { background: rgba(255, 204, 0, 0.2); border-radius: 0 !important; }
 .bg-fill { background: rgba(175, 82, 222, 0.16); box-shadow: 0 0 0 1px rgba(175, 82, 222, 0.35); }
+.bg-flash { animation: flash-fade 2.6s ease-out forwards; }
+@keyframes flash-fade { 0%, 45% { background: rgba(52, 199, 89, 0.32); } 100% { background: rgba(52, 199, 89, 0); } }
 .is-active { background: rgba(0, 122, 255, 0.16); box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.16); }
 
 .score-strip {
@@ -545,6 +547,13 @@ dialog.sheet-wide { width: min(1180px, calc(100vw - 32px)); height: min(820px, c
   max-width: calc(100vw - 32px); text-align: center;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.has-action { display: flex; align-items: center; gap: 14px; padding-right: 8px; }
+.toast.show.has-action { pointer-events: auto; }
+.toast button {
+  border: 0; border-radius: 14px; height: 28px; padding: 0 12px;
+  background: rgba(255, 255, 255, 0.16); color: #64b5ff; font-size: 13.5px; font-weight: 600;
+}
+.toast button:hover { background: rgba(255, 255, 255, 0.26); }
 
 /* ── Smaller screens ── */
 @media (max-width: 1100px) {

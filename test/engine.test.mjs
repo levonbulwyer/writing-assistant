@@ -15,7 +15,7 @@ test('clean: fixes spaces, broken lines, capitals and the word I', () => {
   assert.match(text, /^Hi Sarah,/);
   assert.match(text, /it was sent on Tuesday from/);
   assert.match(text, /arrive by Friday\./);
-  assert.match(text, /arrive, let me know and I’ll chase it up/);
+  assert.match(text, /If it doesn’t arrive, let me know and I’ll chase it up/);
   assert.doesNotMatch(text, / {2}/);
   assert.ok(counts.lineBreaks >= 2);
 });
@@ -47,7 +47,7 @@ test('rules: every style rule fires on its sample', () => {
   const shouty = E.check(sample('shouty'), { checker: speller });
   for (const c of ['shouty', 'avoid', 'repeat']) assert.ok(cats(shouty).includes(c), c);
   const messy = E.check(E.clean(sample('messy')).text, { checker: speller });
-  assert.deepEqual(messy.filter((i) => i.category === 'spelling').map((i) => i.text), ['auckland', 'doesnt']);
+  assert.deepEqual(messy.filter((i) => i.category === 'spelling').map((i) => i.text), ['auckland']);
 });
 
 test('rules: nothing fires on the text that is already fine', () => {
@@ -164,4 +164,37 @@ test('speed: 5,000 words checks in well under a second', () => {
 test('blanks: words inside {{placeholders}} are not flagged by other rules', () => {
   const text = 'Use your reference {{Reference number}} today.';
   assert.deepEqual(E.check(text).map((i) => i.category), ['placeholder']);
+});
+
+test('clean: links, email addresses and blanks are never changed', () => {
+  const src = 'see https://example.co.nz/a--b?x=1,y=2 or mail jo.smith@example.co.nz,then {{customer name}} said "hi".';
+  const { text } = E.clean(src);
+  assert.equal(text, 'See https://example.co.nz/a--b?x=1,y=2 or mail jo.smith@example.co.nz, then {{customer name}} said “hi”.');
+});
+
+test('clean: missing spaces and doubled marks', () => {
+  assert.equal(E.clean('Hi,thanks for that.It is done,, really?? Yes...ok').text, 'Hi, thanks for that. It is done, really? Yes...ok');
+  assert.equal(E.clean('Costs $1,200.50 and 3.5 hours, e.g.It works.').text, 'Costs $1,200.50 and 3.5 hours, e.g.It works.');
+});
+
+test('clean: missing apostrophes', () => {
+  assert.equal(E.clean('im sure we dont need it. Thats fine, it wont take long.').text, 'I’m sure we don’t need it. That’s fine, it won’t take long.');
+  assert.equal(E.clean('dont', { ...E.DEFAULT_SETTINGS, quotes: 'straight' }).text, "Don't");
+  assert.equal(E.clean('thanks for that.im sure. Send report.pdf today').text, 'Thanks for that. I’m sure. Send report.pdf today');
+});
+
+test('clean: short lines without bullets stay on their own lines', () => {
+  const list = 'Please check:\nthe modem lights\nthe cable at the wall\nthe power switch';
+  assert.equal(E.clean(list).text, 'Please check:\nThe modem lights\nThe cable at the wall\nThe power switch');
+  const wrapped = 'We have looked into the delivery and it was sent on\ntuesday from our depot, so it should arrive soon.';
+  assert.equal(E.clean(wrapped).text, 'We have looked into the delivery and it was sent on Tuesday from our depot, so it should arrive soon.');
+});
+
+test('clean: ellipsis and a.m./p.m. do not start a new sentence', () => {
+  assert.equal(E.clean('we will call at 8 a.m. tomorrow. wait... then try again.').text, 'We will call at 8 a.m. tomorrow. Wait... then try again.');
+});
+
+test('clean: each step can be switched off', () => {
+  const off = { ...E.DEFAULT_SETTINGS, clean: { capitals: false, apostrophes: false } };
+  assert.equal(E.clean('hi  there, dont worry.', off).text, 'hi there, dont worry.');
 });

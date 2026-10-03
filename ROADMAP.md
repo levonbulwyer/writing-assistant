@@ -23,6 +23,14 @@ Phase 1 is built. Use its list to demo and test the app: each item says how to t
 - [x] Dash style (spaced en dash, em dash, leave) and bullet style (•, –, -).
 - [x] Capitals after full stops, at line starts, the word I, days and months. Abbreviations like "e.g." are left alone.
 - [x] **Undo**. Test: Clean, then Undo; the original comes back.
+- [x] Links, email addresses and `{{blanks}}` are never changed by Clean.
+- [x] Missing spaces after commas and full stops, and doubled marks (`,,` `??` `..`).
+- [x] Missing apostrophes: dont, cant, wont, im, ive, youre, thats and more.
+- [x] Short lines without bullets are not joined. Test: type a list of short lines that start in lower case, then Clean.
+- [x] Changed words flash green after Clean, and the message has an **Undo** button.
+- [x] Settings → What Clean fixes: switch each fix on or off.
+- [x] Settings → Clean when I paste.
+- [x] Save as Template cleans the text first (switch in the save sheet).
 
 ## 4. Rules engine (first usable version)
 - [x] Sentence and word splitting that keeps character positions (`words`, `sentences` in `src/engine.js`).

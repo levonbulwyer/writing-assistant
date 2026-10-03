@@ -11,6 +11,7 @@
   "license": "MIT",
   "devDependencies": {
     "dictionary-en-gb": "^3.0.0",
+    "diff": "^7.0.0",
     "esbuild": "^0.24.2",
     "nspell": "^2.1.5",
     "playwright": "^1.63.0"

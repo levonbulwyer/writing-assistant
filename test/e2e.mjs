@@ -96,13 +96,52 @@ await step('auto-clean tidies a messy paste', async () => {
   await page.waitForTimeout(200);
 });
 
+await step('Clean shows what changed and Undo in the toast works', async () => {
+  await setText('hi  there,thanks for that.im sure it wont take long');
+  await page.click('#btn-clean');
+  await page.waitForTimeout(150);
+  assert.ok(await page.locator('#backdrop .bg-flash').count() >= 3, 'changed words are tinted');
+  assert.equal(await editor.inputValue(), 'Hi there, thanks for that. I’m sure it won’t take long');
+  await shot('03b-clean-flash');
+  await page.locator('#toast button', { hasText: 'Undo' }).click();
+  await page.waitForTimeout(200);
+  assert.equal(await editor.inputValue(), 'hi  there,thanks for that.im sure it wont take long');
+});
+
+await step('Clean switches and Clean when I paste', async () => {
+  await page.click('#btn-settings');
+  await page.waitForSelector('#settings-sheet[open]');
+  await page.locator('[data-clean="capitals"]').uncheck({ force: true });
+  await page.locator('[data-flag="cleanOnPaste"]').check({ force: true });
+  await page.click('#settings-sheet [data-close]');
+  await setText('');
+  await editor.focus();
+  await page.evaluate(() => {
+    const ta = document.querySelector('#editor');
+    const dt = new DataTransfer();
+    dt.setData('text/plain', 'pasted  text,dont');
+    ta.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    document.execCommand('insertText', false, 'pasted  text,dont');
+  });
+  await page.waitForTimeout(300);
+  assert.equal(await editor.inputValue(), 'pasted text, don’t');
+  await page.click('#btn-settings');
+  await page.locator('[data-clean="capitals"]').check({ force: true });
+  await page.locator('[data-flag="cleanOnPaste"]').uncheck({ force: true });
+  await page.click('#settings-sheet [data-close]');
+  await page.selectOption('#sample-select', 'messy');
+  await page.waitForTimeout(200);
+  await page.click('#btn-clean');
+  await page.waitForTimeout(200);
+});
+
 await step('spelling: suggestions and add to dictionary', async () => {
   await page.waitForSelector('.issue.tone-red [data-fix]', { timeout: 5000 });
-  const card = page.locator('.issue', { hasText: 'doesnt' }).first();
+  assert.match(await editor.inputValue(), /doesn’t arrive/, 'Clean added the apostrophe');
+  const card = page.locator('.issue', { hasText: 'auckland' }).first();
   await card.click();
-  await card.locator('[data-fix="0"]').click();
-  await page.waitForTimeout(300);
-  assert.match(await editor.inputValue(), /doesn’t arrive/);
+  await page.waitForSelector('.issue.active [data-fix="0"]');
+  assert.equal((await page.locator('.issue.active [data-fix="0"]').textContent()).trim(), 'Auckland');
   const auck = page.locator('.issue', { hasText: 'auckland' }).first();
   await auck.click();
   await auck.locator('[data-act="add-word"]').click();
@@ -137,6 +176,10 @@ await step('Mark as Perfect blanks out personal details', async () => {
   await page.waitForSelector('#save-sheet[open]');
   const tpl = await page.locator('#tpl-text').inputValue();
   assert.match(tpl, /^Kia ora \{\{Customer name\}\},/);
+  assert.match(tpl, /I’m sorry/, 'text is cleaned before saving');
+  await page.locator('#tpl-tidy').uncheck({ force: true });
+  assert.match(await page.locator('#tpl-text').inputValue(), /I'm sorry/);
+  await page.locator('#tpl-tidy').check({ force: true });
   assert.match(tpl, /\{\{Your name\}\}$/);
   assert.match(tpl, /\{\{Date\}\}/);
   await page.locator('#tpl-labels [data-group="topic"] [data-label="Appointment"]').click();

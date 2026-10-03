@@ -1,5 +1,6 @@
 // The page: wires the engine to the interface. Everything stays on this page.
 import nspell from 'nspell';
+import { diffWordsWithSpace } from 'diff';
 import * as E from './engine.js';
 import { SAMPLES, EXAMPLE_TEMPLATES, LABEL_GROUPS, AVOID_DEFAULT } from './rules.js';
 
@@ -51,6 +52,7 @@ function loadSettings() {
     ...E.DEFAULT_SETTINGS,
     ...saved,
     checks: { ...E.DEFAULT_SETTINGS.checks, ...(saved.checks || {}) },
+    clean: { ...E.DEFAULT_CLEAN, ...(saved.clean || {}) },
     avoid: Array.isArray(saved.avoid) ? saved.avoid : AVOID_DEFAULT.map((a) => ({ ...a })),
     disabledRules: Array.isArray(saved.disabledRules) ? saved.disabledRules : [],
   };
@@ -70,6 +72,7 @@ const state = {
   checker: null,
   suggestions: new Map(),
   history: [],
+  flash: [],
   caret: { start: 0, end: 0 },
   save: null,
   lib: { query: '', filter: { kind: 'all' }, selectedId: null, mode: 'view', confirm: null },
@@ -90,15 +93,23 @@ const dateTimeFmt = new Intl.DateTimeFormat('en-NZ', { day: 'numeric', month: 's
 // ───────────────────────────── Toast ─────────────────────────────
 
 let toastTimer;
-function toast(msg) {
+function toast(msg, action = null) {
   const el = $('#toast');
   // An open sheet sits above the page, so the toast moves inside it to stay visible.
   const host = document.querySelector('dialog[open]') || document.body;
   if (el.parentNode !== host) host.appendChild(el);
   el.textContent = msg;
+  el.classList.toggle('has-action', !!action);
+  if (action) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = action.label;
+    b.addEventListener('click', () => { el.classList.remove('show'); action.run(); });
+    el.appendChild(b);
+  }
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+  toastTimer = setTimeout(() => el.classList.remove('show'), action ? 6000 : 2600);
 }
 
 // ───────────────────────────── Editing the text ─────────────────────────────
@@ -209,7 +220,20 @@ function runCheck() {
 }
 
 function renderHighlights() {
-  backdrop.innerHTML = E.highlightHtml(ta.value, state.issues, state.activeId);
+  backdrop.innerHTML = E.highlightHtml(ta.value, state.flash.length ? state.issues.concat(state.flash) : state.issues, state.activeId);
+}
+
+// Briefly tint the words Clean changed, so you can see what happened.
+let flashTimer;
+function flashChanges(before, after) {
+  clearTimeout(flashTimer);
+  state.flash = [];
+  if (before.length + after.length > 80000) return;
+  let ranges = [];
+  try { ranges = E.addedRanges(diffWordsWithSpace(before, after)); } catch { ranges = []; }
+  state.flash = ranges.slice(0, 400).map(([start, end], n) => ({ id: 'flash' + n, category: 'flash', start, end, text: '' }));
+  renderHighlights();
+  flashTimer = setTimeout(() => { state.flash = []; renderHighlights(); }, 2600);
 }
 
 function updateButtons() {
@@ -505,13 +529,16 @@ $('#panel-control').addEventListener('click', (e) => {
   if (b) setPanel(b.dataset.panel);
 });
 
-$('#btn-clean').addEventListener('click', () => {
-  const res = E.clean(ta.value, state.settings);
-  if (res.text === ta.value) { toast('Already clean'); return; }
+function doClean({ quiet = false } = {}) {
+  const before = ta.value;
+  const res = E.clean(before, state.settings);
+  if (res.text === before) { if (!quiet) toast('Already clean'); return; }
   state.activeRef = null;
   setAll(res.text);
-  toast(E.describeClean(res.counts));
-});
+  flashChanges(before, res.text);
+  toast(E.describeClean(res.counts), { label: 'Undo', run: undo });
+}
+$('#btn-clean').addEventListener('click', () => doClean());
 $('#btn-undo').addEventListener('click', undo);
 
 async function copyText(text) {
@@ -562,7 +589,14 @@ sampleSelect.addEventListener('change', () => {
 
 // ───────────────────────────── Editor events ─────────────────────────────
 
-ta.addEventListener('input', () => onTextChanged());
+ta.addEventListener('input', () => {
+  if (state.flash.length) { clearTimeout(flashTimer); state.flash = []; }
+  onTextChanged();
+});
+ta.addEventListener('paste', () => {
+  if (!state.settings.cleanOnPaste) return;
+  setTimeout(() => doClean({ quiet: true }), 0);
+});
 function syncCaret() {
   const pos = ta.selectionStart;
   if (ta.selectionEnd - pos > 0 && state.issues.some((i) => i.id === state.activeId && i.start === pos)) return;
@@ -661,12 +695,29 @@ const saveSheet = $('#save-sheet');
 let saveLabelsBound = false;
 
 $('#btn-save').addEventListener('click', openSave);
+function saveSource() {
+  const raw = state.save.raw;
+  return state.save.tidy ? E.clean(raw, state.settings).text : raw;
+}
+function refreshSaveText() {
+  state.save.source = saveSource();
+  state.save.detections = E.findPersonalDetails(state.save.source);
+  state.save.enabled = new Set(state.save.detections.map((d) => d.id));
+  state.save.edited = false;
+  renderRedactions();
+  $('#tpl-text').value = E.applyRedactions(state.save.source, state.save.detections, [...state.save.enabled]);
+}
+
 function openSave() {
   const text = ta.value.trim();
   if (!text) { toast('Write a message first'); return; }
-  const detections = E.findPersonalDetails(text);
+  const tidy = E.clean(text, state.settings).text !== text;
+  const source = tidy ? E.clean(text, state.settings).text : text;
+  const detections = E.findPersonalDetails(source);
   state.save = {
-    source: text,
+    raw: text,
+    tidy,
+    source,
     detections,
     enabled: new Set(detections.map((d) => d.id)),
     type: state.type,
@@ -679,7 +730,9 @@ function openSave() {
   renderLabelPicker($('#tpl-labels'), state.save.labels);
   if (!saveLabelsBound) { bindLabelPicker($('#tpl-labels'), new Proxy({}, { get: (_, k) => state.save.labels[k], set: (_, k, v) => { state.save.labels[k] = v; return true; } })); saveLabelsBound = true; }
   renderRedactions();
-  $('#tpl-text').value = E.applyRedactions(text, detections, [...state.save.enabled]);
+  $('#tpl-text').value = E.applyRedactions(source, detections, [...state.save.enabled]);
+  $('#tpl-tidy-row').hidden = !tidy;
+  $('#tpl-tidy').checked = tidy;
   const open = state.issues.filter((i) => i.category !== 'placeholder').length;
   $('#tpl-text-note').textContent = open
     ? `This message still has ${plural(open, 'suggestion')}. You can save it anyway, or cancel and fix them first.`
@@ -710,6 +763,11 @@ $('#redact-list').addEventListener('change', (e) => {
   state.save.edited = false;
 });
 $('#tpl-text').addEventListener('input', () => { if (state.save) state.save.edited = true; });
+$('#tpl-tidy').addEventListener('change', (e) => {
+  if (state.save.edited) toast('Your edits to the template text were replaced');
+  state.save.tidy = e.target.checked;
+  refreshSaveText();
+});
 
 $('#save-form').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -1063,6 +1121,12 @@ function renderSettings() {
       <div class="field"><span class="field-label">Quote marks</span>${seg('quotes', s.quotes, [['curly', '“Curly”'], ['straight', '"Straight"'], ['keep', 'Leave']])}</div>
       <div class="field"><span class="field-label">Dashes</span>${seg('dashes', s.dashes, [['en', 'Spaced –'], ['em', 'Em —'], ['keep', 'Leave']])}</div>
       <div class="field"><span class="field-label">Bullets</span>${seg('bullets', s.bullets, [['•', '•'], ['–', '–'], ['-', '-']])}</div>
+      <div class="field"><span class="row-main"><span class="row-title">Clean when I paste</span><span class="row-sub">Runs Clean straight after you paste text</span></span><label class="switch"><input type="checkbox" data-flag="cleanOnPaste" ${s.cleanOnPaste ? 'checked' : ''} aria-label="Clean when I paste"><span></span></label></div>
+    </div>
+
+    <h3 class="group-title">What Clean fixes</h3>
+    <div class="group">
+      ${E.CLEAN_STEPS.map((c) => `<div class="field"><span class="row-main"><span class="row-title">${esc(c.name)}</span><span class="row-sub">${esc(c.sub)}</span></span><label class="switch"><input type="checkbox" data-clean="${c.key}" ${s.clean[c.key] ? 'checked' : ''} aria-label="${esc(c.name)}"><span></span></label></div>`).join('')}
     </div>
 
     <h3 class="group-title">Checks</h3>
@@ -1172,6 +1236,8 @@ function addWordFromField() {
 
 $('#settings-body').addEventListener('change', (e) => {
   const s = state.settings;
+  const cleanBox = e.target.closest('[data-clean]');
+  if (cleanBox) { s.clean[cleanBox.dataset.clean] = cleanBox.checked; saveSettings(); return; }
   const check = e.target.closest('[data-check]');
   if (check) { s.checks[check.dataset.check] = check.checked; settingsChanged(); return; }
   const flag = e.target.closest('[data-flag]');

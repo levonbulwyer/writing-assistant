@@ -8,7 +8,7 @@ The page blocks every network connection (a Content Security Policy in the file)
 
 | Part | What you get |
 |---|---|
-| **Clean** | One click fixes double spaces, lines broken by pasting from email or PDF, quote marks, dashes, bullets, capital letters after full stops, the word "I", and day and month names. **Undo** brings the original back. |
+| **Clean** | One click fixes extra spaces, missing spaces after commas and full stops, doubled marks, lines broken by pasting (short list lines are left alone), missing apostrophes (dont → don’t, im → I’m), quote marks, dashes, bullets and capital letters. Links, email addresses and `{{blanks}}` are never changed. The changed words flash green, and the message has an **Undo** button. Each fix can be switched off in Settings, and Clean can run by itself when you paste. |
 | **Issues** | Underlines in the text with a reason beside each: filler words, wordy phrases with plain swaps, passive voice, sentences over 25 words, repeated words, capitals and extra exclamation marks, and your own list of phrases to avoid. Most have a one-click fix. **Fix Simple** applies every easy fix at once. |
 | **Spelling** | New Zealand English (the en-GB "-ise" Hunspell dictionary) plus common te reo Māori words. Suggestions, and **Add to Dictionary** for names and product terms. |
 | **Checklist** | Choose **Email** or **Complaint reply** and it ticks off greeting, acknowledgement, what was done, next step, deadline and sign-off as you type. |

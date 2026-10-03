@@ -16,6 +16,8 @@ export const DEFAULT_SETTINGS = {
     long: true, repeat: true, shouty: true, placeholder: true,
   },
   checkCapitalised: false,
+  clean: null,          // filled from DEFAULT_CLEAN; each Clean step can be switched off
+  cleanOnPaste: false,
   disabledRules: [],
   avoid: AVOID_DEFAULT,
 };
@@ -33,7 +35,7 @@ export const CATEGORIES = {
 };
 
 const L = '\\p{L}\\p{M}';
-const ABBREVIATIONS = new Set(['e.g', 'i.e', 'etc', 'approx', 'incl', 'vs', 'no', 'cf', 'ca', 'mr', 'mrs', 'ms', 'dr', 'st', 'ltd', 'co', 'ph', 'tel', 'attn', 'ref', 'nb', 'p', 'pp', 'eg', 'ie']);
+const ABBREVIATIONS = new Set(['e.g', 'i.e', 'etc', 'approx', 'incl', 'vs', 'no', 'cf', 'ca', 'mr', 'mrs', 'ms', 'dr', 'st', 'ltd', 'co', 'ph', 'tel', 'attn', 'ref', 'nb', 'p', 'pp', 'eg', 'ie', 'a.m', 'p.m', 'am', 'pm', 'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec']);
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 const MONTHS = ['january', 'february', 'april', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 
@@ -144,61 +146,139 @@ function isSentenceStart(text, idx) {
 
 // ───────────────────────────── Auto-clean ─────────────────────────────
 
+// Each part of Clean can be switched off in Settings.
+export const CLEAN_STEPS = [
+  { key: 'spaces', name: 'Extra spaces', sub: 'Double spaces, spaces at line ends, space before a comma' },
+  { key: 'punctuation', name: 'Missing spaces and doubled marks', sub: '“Hi,thanks” → “Hi, thanks”, “,,” → “,”' },
+  { key: 'lineBreaks', name: 'Broken lines', sub: 'Rejoins lines split by pasting from email or PDF' },
+  { key: 'blankLines', name: 'Extra blank lines', sub: 'Keeps one blank line between paragraphs' },
+  { key: 'apostrophes', name: 'Missing apostrophes', sub: '“dont” → “don’t”, “im” → “I’m”' },
+  { key: 'bullets', name: 'Bullets', sub: 'One bullet style' },
+  { key: 'dashes', name: 'Dashes', sub: 'One dash style between words' },
+  { key: 'quotes', name: 'Quote marks', sub: 'One quote style' },
+  { key: 'capitals', name: 'Capital letters', sub: 'Sentence starts, the word I, days and months' },
+];
+export const DEFAULT_CLEAN = Object.fromEntries(CLEAN_STEPS.map((s) => [s.key, true]));
+
+const APOSTROPHE_FIXES = {
+  dont: "don't", doesnt: "doesn't", didnt: "didn't", isnt: "isn't", arent: "aren't", wasnt: "wasn't",
+  werent: "weren't", cant: "can't", couldnt: "couldn't", wouldnt: "wouldn't", shouldnt: "shouldn't",
+  wont: "won't", havent: "haven't", hasnt: "hasn't", hadnt: "hadn't", mustnt: "mustn't", neednt: "needn't",
+  im: "I'm", ive: "I've", youre: "you're", youve: "you've", youll: "you'll", youd: "you'd",
+  theyre: "they're", theyve: "they've", theyll: "they'll", weve: "we've", shes: "she's", hes: "he's",
+  thats: "that's", whats: "what's", wheres: "where's", theres: "there's", heres: "here's", whos: "who's",
+};
+
+// Links, email addresses and {{blanks}} are swapped for markers so Clean never changes them.
+const PROTECT_RE = /\{\{[^{}\n]*\}\}|[\w.+-]+@[\w-]+(?:\.[\w-]+)+|https?:\/\/\S+|www\.\S+/g;
+function protect(text) {
+  const kept = [];
+  const masked = text.replace(PROTECT_RE, (m) => {
+    const trail = m.match(/[.,;:!?)]+$/);
+    const core = trail && !m.startsWith('{{') ? m.slice(0, -trail[0].length) : m;
+    kept.push(core);
+    return `${kept.length - 1}` + (core.length < m.length ? m.slice(core.length) : '');
+  });
+  return { masked, restore: (t) => t.replace(/(\d+)/g, (m, i) => kept[Number(i)]) };
+}
+
 export function clean(input, settings = DEFAULT_SETTINGS) {
+  const on = { ...DEFAULT_CLEAN, ...(settings.clean || {}) };
   const counts = {};
   const bump = (k, n) => { if (n) counts[k] = (counts[k] || 0) + n; };
-  let t = input;
+  const { masked, restore } = protect(input.replace(/\r\n?/g, '\n').replace(/ /g, ' '));
+  let t = masked;
   const count = (re) => (t.match(re) || []).length;
 
-  t = t.replace(/\r\n?/g, '\n').replace(/ /g, ' ');
-
-  // Spaces
-  bump('spaces', count(/[ \t]+$/gm));
-  t = t.replace(/[ \t]+$/gm, '');
-  bump('spaces', count(/^ +(?=\S)/gm));
-  t = t.replace(/^ +(?=\S)/gm, '');
-  bump('spaces', count(/(\S) {2,}/g));
-  t = t.replace(/(\S) {2,}/g, '$1 ');
-  bump('spaces', count(/(\S) +([,.;:!?])(?=\s|$)/g));
-  t = t.replace(/(\S) +([,.;:!?])(?=\s|$)/g, '$1$2');
-
-  // Rejoin lines broken by pasting from emails or PDFs
-  const lines = t.split('\n');
-  const isBullet = (s) => /^\s*([*•·◦‣▪●–-]\s|\d+[.)]\s)/.test(s);
-  const merged = [];
-  let joins = 0;
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
-    while (
-      i + 1 < lines.length &&
-      line.trim() !== '' &&
-      lines[i + 1].trim() !== '' &&
-      !isBullet(lines[i + 1]) &&
-      !/[.!?:;,]["”’)]?$/.test(line) &&
-      /^[a-z(]/.test(lines[i + 1])
-    ) {
-      if (/[a-z]-$/.test(line)) line = line.slice(0, -1) + lines[i + 1];
-      else line = line + ' ' + lines[i + 1];
-      i++;
-      joins++;
-    }
-    merged.push(line);
+  if (on.spaces) {
+    bump('spaces', count(/[ \t]+$/gm));
+    t = t.replace(/[ \t]+$/gm, '');
+    bump('spaces', count(/^ +(?=\S)/gm));
+    t = t.replace(/^ +(?=\S)/gm, '');
+    bump('spaces', count(/(\S) {2,}/g));
+    t = t.replace(/(\S) {2,}/g, '$1 ');
+    bump('spaces', count(/(\S) +([,;:!?]|\.(?!\.))(?=\s|$)/g));
+    t = t.replace(/(\S) +([,;:!?]|\.(?!\.))(?=\s|$)/g, '$1$2');
   }
-  bump('lineBreaks', joins);
-  t = merged.join('\n');
 
-  bump('blankLines', count(/\n{3,}/g));
-  t = t.replace(/\n{3,}/g, '\n\n');
+  if (on.apostrophes) {
+    const re = new RegExp(`\\b(${Object.keys(APOSTROPHE_FIXES).join('|')})\\b`, 'gi');
+    t = t.replace(re, (m) => {
+      if (m === m.toUpperCase() && m.length > 2) return m; // CANT in capitals: leave for the shouting rule
+      bump('apostrophes', 1);
+      let fix = APOSTROPHE_FIXES[m.toLowerCase()];
+      if (on.quotes && settings.quotes === 'curly') fix = fix.replace("'", '’');
+      return /^I['’]/.test(fix) ? fix : (/^\p{Lu}/u.test(m) ? fix.charAt(0).toUpperCase() + fix.slice(1) : fix);
+    });
+  }
 
-  // Bullets
-  const b = settings.bullets || '•';
-  t = t.replace(/^([*•·◦‣▪●–]|-)[ \t]+/gm, (m, mark) => {
-    if (mark !== b) bump('bullets', 1);
-    return b + ' ';
-  });
+  if (on.punctuation) {
+    // Doubled marks (an ellipsis "..." is left alone)
+    t = t.replace(/,{2,}/g, () => { bump('punctuation', 1); return ','; });
+    t = t.replace(/([^.])\.\.(?!\.)/g, (m, p) => { bump('punctuation', 1); return p + '.'; });
+    t = t.replace(/\?{2,}/g, () => { bump('punctuation', 1); return '?'; });
+    // Missing space after a comma, or after a full stop that ends a sentence
+    t = t.replace(/,(?=\p{L})/gu, () => { bump('punctuation', 1); return ', '; });
+    t = t.replace(/(\p{Ll}{2,})([.?!])(\p{Lu})(?=\p{Ll}|['’]\p{Ll}|\s)/gu, (m, w, p, n) => {
+      if (ABBREVIATIONS.has(w.toLowerCase())) return m;
+      bump('punctuation', 1);
+      return `${w}${p} ${n}`;
+    });
+  }
 
-  // Dashes between words
-  if (settings.dashes !== 'keep') {
+  if (on.lineBreaks) {
+    // Rejoin lines broken by pasting. A line is only joined to the next when it is close to the
+    // longest line in its block, so short lines (a list without bullets) stay as they are.
+    const lines = t.split('\n');
+    const isBullet = (s) => /^\s*([*•·◦‣▪●–-]\s|\d+[.)]\s)/.test(s);
+    const blockMax = new Array(lines.length).fill(0);
+    for (let i = 0; i < lines.length;) {
+      let j = i;
+      while (j < lines.length && lines[j].trim() !== '') j++;
+      const max = Math.max(0, ...lines.slice(i, j).map((l) => l.length));
+      for (let k = i; k < j; k++) blockMax[k] = max;
+      i = j + 1;
+    }
+    const merged = [];
+    let joins = 0;
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+      const wrapAt = blockMax[i];
+      while (
+        i + 1 < lines.length &&
+        line.trim() !== '' &&
+        lines[i + 1].trim() !== '' &&
+        !isBullet(lines[i + 1]) &&
+        !/[.!?:;,]["”’)]?$/.test(line) &&
+        /^[a-z(]/.test(lines[i + 1]) &&
+        lines[i].length >= 30 &&
+        lines[i].length >= wrapAt * 0.7
+      ) {
+        if (/[a-z]-$/.test(line)) line = line.slice(0, -1) + lines[i + 1];
+        else line = line + ' ' + lines[i + 1];
+        i++;
+        joins++;
+      }
+      merged.push(line);
+    }
+    bump('lineBreaks', joins);
+    t = merged.join('\n');
+  }
+
+  if (on.blankLines) {
+    bump('blankLines', count(/\n{3,}/g));
+    t = t.replace(/\n{3,}/g, '\n\n');
+  }
+
+  if (on.bullets) {
+    const b = settings.bullets || '•';
+    t = t.replace(/^([*•·◦‣▪●–]|-)[ \t]+/gm, (m, mark) => {
+      if (mark !== b) bump('bullets', 1);
+      return b + ' ';
+    });
+  }
+
+  if (on.dashes && settings.dashes !== 'keep') {
     const dash = settings.dashes === 'em' ? '—' : ' – ';
     const swap = (m, pre) => {
       const out = pre + dash;
@@ -209,51 +289,52 @@ export function clean(input, settings = DEFAULT_SETTINGS) {
     t = t.replace(/([\p{L}\d])(?:-{2,3}|—)(?=[\p{L}\d])/gu, swap);
   }
 
-  // Quotes
-  if (settings.quotes === 'curly') {
+  if (on.quotes && settings.quotes === 'curly') {
     t = t.replace(/(^|[\s([{—–])"/gm, (m, p) => { bump('quotes', 1); return p + '“'; });
     t = t.replace(/"/g, () => { bump('quotes', 1); return '”'; });
     t = t.replace(/([\p{L}\d])'/gu, (m, p) => { bump('quotes', 1); return p + '’'; });
     t = t.replace(/(^|[\s([{—–“])'/gm, (m, p) => { bump('quotes', 1); return p + '‘'; });
     t = t.replace(/'/g, () => { bump('quotes', 1); return '’'; });
-  } else if (settings.quotes === 'straight') {
+  } else if (on.quotes && settings.quotes === 'straight') {
     t = t.replace(/[“”„]/g, () => { bump('quotes', 1); return '"'; });
     t = t.replace(/[‘’]/g, () => { bump('quotes', 1); return "'"; });
   }
 
-  // The word I on its own
-  t = t.replace(/(^|[\s(“"‘'])i(?=['’](?:m|ve|ll|d)\b|[\s,!?;:)]|\.(?!e\.)|$)/gm, (m, p) => { bump('capitals', 1); return p + 'I'; });
-
-  // Day and month names (not "may" or "march", which are also ordinary words)
-  const dm = new RegExp(`\\b(${DAYS.concat(MONTHS).join('|')})\\b`, 'g');
-  t = t.replace(dm, (m) => { bump('capitals', 1); return capFirst(m); });
-
-  // First letter of each line
-  t = t.replace(/^((?:[•–-]\s+)?[“"‘'(]?)([a-z])(\S*)/gm, (m, pre, ch, rest) => {
-    if (/[@/.\d:]/.test(rest) || /^(www|http)/i.test(ch + rest)) return m;
-    bump('capitals', 1);
-    return pre + ch.toUpperCase() + rest;
-  });
-
-  // First letter after a full stop, question mark or exclamation mark
-  t = t.replace(/([.!?])(["”’)]?[ \t]+)([a-z])/g, (m, end, gap, ch, offset) => {
-    if (end === '.') {
-      const w = wordBefore(t, offset);
-      if (ABBREVIATIONS.has(w)) return m;
-    }
-    bump('capitals', 1);
-    return end + gap + ch.toUpperCase();
-  });
+  if (on.capitals) {
+    // The word I on its own
+    t = t.replace(/(^|[\s(“"‘'])i(?=['’](?:m|ve|ll|d)\b|[\s,!?;:)]|\.(?!e\.)|$)/gm, (m, p) => { bump('capitals', 1); return p + 'I'; });
+    // Day and month names (not "may" or "march", which are also ordinary words)
+    const dm = new RegExp(`\\b(${DAYS.concat(MONTHS).join('|')})\\b`, 'g');
+    t = t.replace(dm, (m) => { bump('capitals', 1); return capFirst(m); });
+    // First letter of each line
+    t = t.replace(/^((?:[•–-]\s+)?[“"‘'(]?)([a-z])(\S*)/gm, (m, pre, ch, rest) => {
+      if (/[@/.\d:]/.test(rest) || /^(www|http)/i.test(ch + rest)) return m;
+      bump('capitals', 1);
+      return pre + ch.toUpperCase() + rest;
+    });
+    // First letter after a full stop, question mark or exclamation mark
+    t = t.replace(/([.!?])(["”’)]?[ \t]+)([a-z])/g, (m, end, gap, ch, offset) => {
+      if (end === '.') {
+        if (t[offset - 1] === '.') return m; // an ellipsis does not end a sentence
+        const w = wordBefore(t, offset);
+        if (ABBREVIATIONS.has(w)) return m;
+      }
+      bump('capitals', 1);
+      return end + gap + ch.toUpperCase();
+    });
+  }
 
   t = t.replace(/^\n+/, '').replace(/\s+$/, '');
-  return { text: t, counts };
+  return { text: restore(t), counts };
 }
 
 export function describeClean(counts) {
   const names = {
     spaces: ['extra space', 'extra spaces'],
+    punctuation: ['spacing or punctuation fix', 'spacing or punctuation fixes'],
     lineBreaks: ['broken line rejoined', 'broken lines rejoined'],
     blankLines: ['run of blank lines', 'runs of blank lines'],
+    apostrophes: ['missing apostrophe', 'missing apostrophes'],
     bullets: ['bullet', 'bullets'],
     dashes: ['dash', 'dashes'],
     quotes: ['quote mark', 'quote marks'],
@@ -532,9 +613,10 @@ export function highlightHtml(text, issues, activeId = null) {
     if (under) cls.push('u-' + under);
     if (cats.has('long')) cls.push('bg-long');
     if (cats.has('placeholder')) cls.push('bg-fill');
+    if (cats.has('flash')) cls.push('bg-flash');
     if (activeId && covering.some((i) => i.id === activeId)) cls.push('is-active');
-    const top = covering.filter((i) => i.category !== 'long').sort((a, b) => (a.end - a.start) - (b.end - b.start))[0] || covering[0];
-    html += `<span class="${cls.join(' ')}" data-issue="${top.id}">${chunk}</span>`;
+    const top = covering.filter((i) => i.category !== 'long' && i.category !== 'flash').sort((a, b) => (a.end - a.start) - (b.end - b.start))[0] || covering.find((i) => i.category === 'long');
+    html += `<span class="${cls.join(' ')}"${top ? ` data-issue="${top.id}"` : ''}>${chunk}</span>`;
   }
   return html + '\n ';
 }
@@ -796,5 +878,23 @@ export function placeholderNames(text) {
   let m;
   PLACEHOLDER_RE.lastIndex = 0;
   while ((m = PLACEHOLDER_RE.exec(text))) out.push(m[1].trim());
+  return out;
+}
+
+// Where the new text differs from the old, as [start, end] ranges in the new text.
+// `diffParts` is the output of a word diff (jsdiff's diffWordsWithSpace).
+export function addedRanges(diffParts) {
+  const out = [];
+  let pos = 0;
+  for (const part of diffParts) {
+    if (part.removed) continue;
+    const end = pos + part.value.length;
+    if (part.added) {
+      const s = pos + (part.value.length - part.value.trimStart().length);
+      const e = end - (part.value.length - part.value.trimEnd().length);
+      out.push([s, e > s ? e : end]);
+    }
+    pos = end;
+  }
   return out;
 }
