@@ -87513,14 +87513,14 @@ ${fromBody}`;
       const word2 = text.slice(start3, end2);
       const expected = (m3.expected || []).slice(0, 3);
       if (m3.source === "retext-equality") {
-        if (EQUALITY_SKIP.has(m3.ruleId)) continue;
+        if (EQUALITY_SKIP.has(m3.ruleId) || !expected.length) continue;
         out2.push({
           rule: `inclusive:${m3.ruleId}`,
           category: "inclusive",
           start: start3,
           end: end2,
           text: word2,
-          message: `“${word2}” can come across as insensitive. ${expected.length ? "Consider " + expected.map((e2) => `“${e2}”`).join(", ") + "." : ""}`.trim(),
+          message: `“${word2}” can come across as insensitive. Consider ${expected.map((e2) => `“${e2}”`).join(", ")}.`,
           fixes: expected.map((e2) => ({ label: `Change to “${e2}”`, start: start3, end: end2, replacement: matchCase2(word2, e2) }))
         });
       } else if (m3.source === "retext-indefinite-article") {
@@ -87670,7 +87670,7 @@ ${fromBody}`;
     const delta = newText.length - oldText.length;
     const out2 = [];
     for (const i3 of issues) {
-      if (i3.end <= p5) out2.push(i3);
+      if (i3.end < p5) out2.push(i3);
       else if (i3.start >= oldText.length - s3) {
         const shift = (n3) => n3 + delta;
         out2.push({ ...i3, start: shift(i3.start), end: shift(i3.end), fixes: i3.fixes.map((f3) => ({ ...f3, start: shift(f3.start), end: shift(f3.end) })) });

@@ -36,10 +36,11 @@ function retextIssues(text) {
     const word = text.slice(start, end);
     const expected = (m.expected || []).slice(0, 3);
     if (m.source === 'retext-equality') {
-      if (EQUALITY_SKIP.has(m.ruleId)) continue;
+      // No suggestion means a tone note ("just", "basically"). The filler rule already covers those.
+      if (EQUALITY_SKIP.has(m.ruleId) || !expected.length) continue;
       out.push({
         rule: `inclusive:${m.ruleId}`, category: 'inclusive', start, end, text: word,
-        message: `“${word}” can come across as insensitive. ${expected.length ? 'Consider ' + expected.map((e) => `“${e}”`).join(', ') + '.' : ''}`.trim(),
+        message: `“${word}” can come across as insensitive. Consider ${expected.map((e) => `“${e}”`).join(', ')}.`,
         fixes: expected.map((e) => ({ label: `Change to “${e}”`, start, end, replacement: matchCase(word, e) })),
       });
     } else if (m.source === 'retext-indefinite-article') {
@@ -181,7 +182,7 @@ export function carryOver(oldText, newText, issues) {
   const delta = newText.length - oldText.length;
   const out = [];
   for (const i of issues) {
-    if (i.end <= p) out.push(i);
+    if (i.end < p) out.push(i); // an edit touching the end of a word changes the word, so drop it
     else if (i.start >= oldText.length - s) {
       const shift = (n) => n + delta;
       out.push({ ...i, start: shift(i.start), end: shift(i.end), fixes: i.fixes.map((f) => ({ ...f, start: shift(f.start), end: shift(f.end) })) });
