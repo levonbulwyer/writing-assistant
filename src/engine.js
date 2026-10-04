@@ -3,7 +3,7 @@
 
 import {
   FILLER, WORDY, AVOID_DEFAULT, REPEAT_STOPWORDS, ACRONYMS, NOT_PASSIVE,
-  IRREGULAR_PARTICIPLES, NZ_WORDS,
+  IRREGULAR_PARTICIPLES, NZ_WORDS, COMMA_OPENERS, SPLICE_WORDS, SIGNOFF_NEEDS_COMMA, TITLES, PROPER_NOUNS,
 } from './rules.js';
 
 export const DEFAULT_SETTINGS = {
@@ -14,7 +14,9 @@ export const DEFAULT_SETTINGS = {
   checks: {
     spelling: true, filler: true, wordy: true, avoid: true, passive: true,
     long: true, repeat: true, shouty: true, placeholder: true,
+    punctuation: true, capital: true, grammar: true, inclusive: true,
   },
+  properNouns: [],      // your own names and brands that always take a capital
   checkCapitalised: false,
   clean: null,          // filled from DEFAULT_CLEAN; each Clean step can be switched off
   cleanOnPaste: false,
@@ -32,6 +34,10 @@ export const CATEGORIES = {
   filler:      { name: 'Filler word',     tone: 'blue' },
   passive:     { name: 'Passive voice',   tone: 'blue' },
   long:        { name: 'Long sentence',   tone: 'yellow' },
+  punctuation: { name: 'Punctuation',         tone: 'teal' },
+  capital:     { name: 'Capital letters', tone: 'purple' },
+  grammar:     { name: 'Grammar',         tone: 'green' },
+  inclusive:   { name: 'Wording',         tone: 'gray' },
 };
 
 const L = '\\p{L}\\p{M}';
@@ -542,11 +548,206 @@ export function spellingIssues(text, checker, settings = DEFAULT_SETTINGS, perso
   return out;
 }
 
+
+// ───────────────────────────── Commas and capitals ─────────────────────────────
+
+const GREETING_LINE = /^(hi|hello|hey|dear|kia ora|tēnā koe|tena koe|tēnā koutou|tena koutou|mōrena|morena|good (?:morning|afternoon|evening))\b/i;
+const GREETING_SKIP = new Set(['there', 'all', 'team', 'everyone', 'everybody', 'both', 'folks', 'and', 'to', 'you', 'again', 'morning', 'afternoon', 'evening', 'whānau', 'whanau', 'e', 'hoa']);
+const cleanLine = (s) => s.replace(/[ \t]+$/, '');
+
+function lineList(text) {
+  const out = [];
+  let pos = 0;
+  for (const raw of text.split('\n')) {
+    out.push({ start: pos, end: pos + raw.length, text: raw });
+    pos += raw.length + 1;
+  }
+  return out;
+}
+
+const insertComma = (at, label = 'Add a comma') => ({ label, start: at, end: at, replacement: ',' });
+
+function commaIssues(text) {
+  const out = [];
+  let m;
+
+  // “However we” → “However, we”
+  const opener = new RegExp(`(^|[.!?]["”’)]*[ \\t]+|\\n[ \\t]*)(${COMMA_OPENERS.map(escapeRegex).join('|')})(?=[ \\t]+[${L}])`, 'giu');
+  while ((m = opener.exec(text))) {
+    const start = m.index + m[1].length, end = start + m[2].length;
+    out.push({
+      rule: 'punctuation:opener', category: 'punctuation', start, end, text: m[2],
+      message: `Put a comma after “${m[2]}” at the start of a sentence.`,
+      fixes: [insertComma(end)],
+    });
+    opener.lastIndex = end;
+  }
+
+  // “…, however we …” is two sentences joined by a comma
+  const splice = new RegExp(`([${L}\\d])(,)([ \\t]+)(${SPLICE_WORDS.join('|')})\\b(,?)(?=[ \\t]+(?:I|we|you|they|he|she|it|the|this|that|there|our|your|my|a|an)\\b|,)`, 'giu');
+  while ((m = splice.exec(text))) {
+    const start = m.index + m[1].length, end = m.index + m[0].length;
+    const word = m[4];
+    out.push({
+      rule: 'punctuation:splice', category: 'punctuation', start, end, text: text.slice(start, end),
+      message: `A comma alone cannot join two sentences before “${word}”. Use a semicolon, or start a new sentence.`,
+      fixes: [
+        { label: `Change to “; ${word},”`, start, end, replacement: `; ${word},` },
+        { label: `Start a new sentence`, start, end, replacement: `. ${capFirst(word)},` },
+      ],
+    });
+  }
+
+  // “I would like to help but we cannot” → comma before “but”
+  const but = new RegExp(`([${L}\\d])([ \\t]+)(but)([ \\t]+)(I|we|you|they|he|she|it|there|our|your|my)\\b`, 'giu');
+  while ((m = but.exec(text))) {
+    const before = text.slice(0, m.index + 1);
+    const sentStart = Math.max(before.lastIndexOf('.'), before.lastIndexOf('!'), before.lastIndexOf('?'), before.lastIndexOf('\n'));
+    if (words(before.slice(sentStart + 1)).length < 3) continue;
+    if (/\bnot only\b/i.test(before.slice(sentStart + 1)) || /\b(nothing|anything|everything|all|except)\s*$|\b(cannot|can't|can’t|couldn't|couldn’t)\s+help\s*$/i.test(before)) continue;
+    const start = m.index + m[1].length + m[2].length;
+    out.push({
+      rule: 'punctuation:but', category: 'punctuation', start, end: start + 3, text: m[3],
+      message: 'Put a comma before “but” when it joins two complete thoughts.',
+      fixes: [insertComma(m.index + m[1].length, 'Add a comma before “but”')],
+    });
+  }
+
+  const lines = lineList(text);
+  const nextFilled = (i) => lines.slice(i + 1).find((l) => l.text.trim());
+
+  // “Hi Sarah” → “Hi Sarah,”
+  const first = lines.findIndex((l) => l.text.trim());
+  if (first !== -1) {
+    const l = lines[first], t = cleanLine(l.text).trim();
+    if (GREETING_LINE.test(t) && !/[,.!?:;]$/.test(t) && words(t).length >= 2 && words(t).length <= 6 && nextFilled(first)) {
+      const end = l.start + cleanLine(l.text).length;
+      out.push({
+        rule: 'punctuation:greeting', category: 'punctuation', start: end - Math.min(t.length, 12), end, text: text.slice(end - Math.min(t.length, 12), end),
+        message: 'Put a comma after the name in the greeting.', fixes: [insertComma(end)],
+      });
+    }
+  }
+
+  // “Kind regards” → “Kind regards,”
+  lines.forEach((l, i) => {
+    const t = l.text.trim().toLowerCase();
+    if (SIGNOFF_NEEDS_COMMA.includes(t) && nextFilled(i)) {
+      const end = l.start + cleanLine(l.text).length;
+      out.push({
+        rule: 'punctuation:signoff', category: 'punctuation', start: l.start + (l.text.length - l.text.trimStart().length), end, text: l.text.trim(),
+        message: 'Put a comma after the sign-off.', fixes: [insertComma(end)],
+      });
+    }
+  });
+  return out;
+}
+
+const upperFix = (s) => capFirst(s);
+
+function capitalIssues(text, settings = DEFAULT_SETTINGS) {
+  const out = [];
+  const seen = new Set();
+  const add = (rule, start, end, message, replacement) => {
+    if (seen.has(start)) return;
+    seen.add(start);
+    const original = text.slice(start, end);
+    out.push({
+      rule: `capital:${rule}`, category: 'capital', start, end, text: original, message,
+      fixes: [{ label: `Change to “${replacement}”`, start, end, replacement }],
+    });
+  };
+  let m;
+
+  // The word I
+  const iRe = /(^|[\s(“"‘'])(i)(?=['’](?:m|ve|ll|d)\b|[\s,!?;:)]|\.(?!e\.)|$)/gm;
+  while ((m = iRe.exec(text))) add('i', m.index + m[1].length, m.index + m[1].length + 1, 'The word “I” is always a capital.', 'I');
+
+  // Days and months (not “may” or “march”, which are also ordinary words)
+  const dm = new RegExp(`\\b(${DAYS.concat(MONTHS).join('|')})\\b`, 'g');
+  while ((m = dm.exec(text))) add('day', m.index, m.index + m[0].length, 'Days and months take a capital.', upperFix(m[0]));
+
+  // Titles: “mr patel” → “Mr Patel”
+  const titles = TITLES.join('|');
+  const tl = new RegExp(`(^|[^${L}\\d.])(${titles})(\\.?)([ \\t]+)([${L}][${L}'’-]*)`, 'giu');
+  while ((m = tl.exec(text))) {
+    const ts = m.index + m[1].length;
+    if (/^\p{Ll}/u.test(m[2]) && !/\d[ \t]*$/.test(text.slice(Math.max(0, ts - 4), ts))) add('title', ts, ts + m[2].length, 'Titles such as Mr, Mrs and Dr take a capital.', upperFix(m[2]));
+    const ns = ts + m[2].length + m[3].length + m[4].length;
+    if (/^\p{Ll}/u.test(m[5])) add('name', ns, ns + m[5].length, 'Names take a capital.', upperFix(m[5]));
+  }
+
+  const lines = lineList(text);
+
+  // Names in the greeting: “Hi john” → “Hi John”
+  const first = lines.find((l) => l.text.trim());
+  if (first) {
+    const g = first.text.match(GREETING_LINE);
+    if (g) {
+      const nameRe = new RegExp(`[${L}][${L}'’-]*`, 'gu');
+      const rest = first.text.slice(g[0].length);
+      while ((m = nameRe.exec(rest))) {
+        if (!/^\p{Ll}/u.test(m[0]) || GREETING_SKIP.has(m[0].toLowerCase())) continue;
+        if (/^(mr|mrs|ms|mx|dr)$/i.test(m[0])) continue;
+        const s = first.start + g[0].length + m.index;
+        add('name', s, s + m[0].length, 'Names take a capital.', upperFix(m[0]));
+      }
+    }
+  }
+
+  // Names under the sign-off
+  lines.forEach((l, i) => {
+    if (!SIGNOFF_NEEDS_COMMA.includes(l.text.trim().toLowerCase().replace(/[,.!]$/, ''))) return;
+    const next = lines.slice(i + 1).find((x) => x.text.trim());
+    if (!next || /[.!?@:]/.test(next.text) || words(next.text).length > 4) return;
+    const re = new RegExp(`[${L}][${L}'’-]*`, 'gu');
+    while ((m = re.exec(next.text))) if (/^\p{Ll}/u.test(m[0]) && !/\p{Lu}/u.test(m[0])) add('name', next.start + m.index, next.start + m.index + m[0].length, 'Names take a capital.', upperFix(m[0]));
+  });
+
+  // Start of a line, after a blank line, a full stop or a comma-ended greeting
+  lines.forEach((l, i) => {
+    const mm = l.text.match(/^((?:[•–-]\s+)?[“"‘'(]?)(\p{Ll})([^\s]*)/u);
+    if (!mm) return;
+    const token = mm[2] + mm[3];
+    if (/[@/.\d:{]/.test(token) || /\p{Lu}/u.test(token) || /^(www|http)/i.test(token)) return;
+    const prev = lines.slice(0, i).reverse().find((x) => x.text.trim());
+    const startsFresh = !prev || /[.!?,:;"”’)}]$/.test(prev.text.trim()) || lines[i - 1].text.trim() === '' || /^[•–-]\s/.test(l.text);
+    if (!startsFresh) return;
+    const s = l.start + mm[1].length;
+    add('line', s, s + 1, 'Start with a capital letter.', mm[2].toUpperCase());
+  });
+
+  // After a full stop, question mark or exclamation mark
+  const sent = /([.!?])(["”’)]?[ \t]+)(\p{Ll})/gu;
+  while ((m = sent.exec(text))) {
+    if (m[1] === '.') {
+      if (text[m.index - 1] === '.') continue;
+      if (ABBREVIATIONS.has(wordBefore(text, m.index)) || /^\d+$/.test(wordBefore(text, m.index))) continue;
+    }
+    const s = m.index + m[1].length + m[2].length;
+    const wordEnd = text.slice(s).search(/[\s]/);
+    const token = text.slice(s, wordEnd === -1 ? undefined : s + wordEnd);
+    if (/[@/.\d:{]/.test(token.replace(/[.,;:!?)]+$/, '')) || /\p{Lu}/u.test(token)) continue;
+    add('sentence', s, s + 1, 'Start a sentence with a capital letter.', m[3].toUpperCase());
+  }
+
+  // Places, brands and your own names that always take a capital
+  const names = PROPER_NOUNS.concat((settings.properNouns || []).map((s) => s.trim()).filter(Boolean));
+  names.forEach((name) => {
+    const re = phraseRegex(name);
+    for (const hit of phraseMatches(text, re)) {
+      if (hit.text === name || hit.text === hit.text.toUpperCase()) continue;
+      add('proper', hit.start, hit.end, `“${name}” takes a capital.`, name);
+    }
+  });
+  return out;
+}
+
 export function issueKey(issue) {
   return `${issue.rule}|${issue.text.toLowerCase()}`;
 }
 
-export function check(text, { settings = DEFAULT_SETTINGS, checker = null, personal = [], ignored = [] } = {}) {
+export function check(text, { settings = DEFAULT_SETTINGS, checker = null, personal = [], ignored = [], extra = [] } = {}) {
   const on = settings.checks || DEFAULT_SETTINGS.checks;
   let issues = [];
   let phrases = [];
@@ -561,6 +762,21 @@ export function check(text, { settings = DEFAULT_SETTINGS, checker = null, perso
   if (on.shouty) issues = issues.concat(shoutyIssues(text));
   if (on.placeholder) issues = issues.concat(placeholderIssues(text));
   if (on.spelling) issues = issues.concat(spellingIssues(text, checker, settings, personal));
+  const prot = protectedRanges(text);
+  if (on.punctuation !== false) issues = issues.concat(commaIssues(text).filter((i) => !inRanges(prot, i.start, i.end)));
+  if (on.capital !== false) issues = issues.concat(capitalIssues(text, settings).filter((i) => !inRanges(prot, i.start, i.end)));
+  // A lower-case name is a capital problem, not a spelling one: show it once
+  const caps = issues.filter((i) => i.category === 'capital');
+  if (caps.length) issues = issues.filter((i) => i.category !== 'spelling' || !caps.some((c) => c.start < i.end && c.end > i.start));
+  // Results from the grammar libraries (they run outside this file) join the list here
+  const kept = [];
+  for (const x of extra) {
+    if (on[x.category] === false) continue;
+    const clash = issues.concat(kept).some((o) => o.category === x.category && o.start < x.end && o.end > x.start)
+      || (x.category === 'grammar' && issues.some((o) => o.category === 'spelling' && o.start < x.end && o.end > x.start));
+    if (!clash) kept.push(x);
+  }
+  issues = issues.concat(kept);
 
   // Words inside a {{blank}} are never style or spelling problems
   const blanks = [];
@@ -609,7 +825,7 @@ export function highlightHtml(text, issues, activeId = null) {
     if (!covering.length) { html += chunk; continue; }
     const cats = new Set(covering.map((i) => i.category));
     const cls = [];
-    const under = ['spelling', 'shouty', 'avoid', 'repeat', 'wordy', 'filler', 'passive'].find((c) => cats.has(c));
+    const under = ['spelling', 'grammar', 'capital', 'punctuation', 'inclusive', 'shouty', 'avoid', 'repeat', 'wordy', 'filler', 'passive'].find((c) => cats.has(c));
     if (under) cls.push('u-' + under);
     if (cats.has('long')) cls.push('bg-long');
     if (cats.has('placeholder')) cls.push('bg-fill');

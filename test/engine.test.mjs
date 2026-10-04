@@ -47,7 +47,9 @@ test('rules: every style rule fires on its sample', () => {
   const shouty = E.check(sample('shouty'), { checker: speller });
   for (const c of ['shouty', 'avoid', 'repeat']) assert.ok(cats(shouty).includes(c), c);
   const messy = E.check(E.clean(sample('messy')).text, { checker: speller });
-  assert.deepEqual(messy.filter((i) => i.category === 'spelling').map((i) => i.text), ['auckland']);
+  // A lower-case place name is reported once, as a capital letter problem and not as spelling
+  assert.deepEqual(messy.filter((i) => i.category === 'spelling').map((i) => i.text), []);
+  assert.ok(messy.some((i) => i.rule === 'capital:proper' && i.text === 'auckland'));
 });
 
 test('rules: nothing fires on the text that is already fine', () => {
@@ -197,4 +199,52 @@ test('clean: ellipsis and a.m./p.m. do not start a new sentence', () => {
 test('clean: each step can be switched off', () => {
   const off = { ...E.DEFAULT_SETTINGS, clean: { capitals: false, apostrophes: false } };
   assert.equal(E.clean('hi  there, dont worry.', off).text, 'hi there, dont worry.');
+});
+
+test('commas: openers, but, splices, greeting and sign-off', () => {
+  const rules = (t) => E.check(t, { checker: speller }).filter((i) => i.category === 'punctuation').map((i) => i.rule);
+  assert.deepEqual(rules('We looked. However we could not fix it.'), ['punctuation:opener']);
+  assert.deepEqual(rules('We looked. However, we could not fix it.'), []);
+  assert.deepEqual(rules('I would like to help but we cannot do that today.'), ['punctuation:but']);
+  assert.deepEqual(rules('I am sorry, but we cannot do that today.'), []);
+  assert.deepEqual(rules('We checked the account, however we found nothing.'), ['punctuation:splice']);
+  assert.deepEqual(rules('Hi Sarah\n\nThanks for waiting.\n\nKind regards\nAlex'), ['punctuation:greeting', 'punctuation:signoff']);
+  assert.deepEqual(rules('Hi Sarah,\n\nThanks for waiting.\n\nKind regards,\nAlex'), []);
+  assert.deepEqual(rules('Instead of waiting we sent it. Nothing but time. Not only did we call but we wrote.'), []);
+});
+
+test('commas: each fix gives the expected text', () => {
+  const t = 'Hi Sarah\n\nHowever we cannot help.';
+  const fixes = E.check(t, { checker: speller }).filter((i) => i.category === 'punctuation').map((i) => i.fixes[0]);
+  assert.equal(E.applyFixes(t, fixes), 'Hi Sarah,\n\nHowever, we cannot help.');
+  const s = 'We checked, however we found nothing.';
+  const issue = E.check(s).find((i) => i.rule === 'punctuation:splice');
+  assert.equal(E.applyFixes(s, [issue.fixes[0]]), 'We checked; however, we found nothing.');
+});
+
+test('capitals: sentence starts, I, days, titles, names and places', () => {
+  const t = 'Hi john\n\nI spoke to mr patel in wellington on monday. i said so. thanks, alex';
+  const got = E.check(t, { checker: speller }).filter((i) => i.category === 'capital');
+  const fixed = E.applyFixes(t, got.map((i) => i.fixes[0]));
+  assert.equal(fixed, 'Hi John,\n\nI spoke to Mr Patel in Wellington on Monday. I said so. Thanks, alex'.replace('Hi John,', 'Hi John'));
+});
+
+test('capitals: abbreviations, links, ellipsis and ordinary words are left alone', () => {
+  const t = 'Call us e.g. on 0800 123 456. See www.example.co.nz or jo@example.co.nz... then reply. Spark and the kiwi bank said ok.';
+  assert.deepEqual(E.check(t, { checker: speller }).filter((i) => i.category === 'capital'), []);
+});
+
+test('capitals: your own list of names is used', () => {
+  const settings = { ...E.DEFAULT_SETTINGS, properNouns: ['Acme Telecom'] };
+  const issue = E.check('We rang acme telecom today.', { settings, checker: speller }).find((i) => i.rule === 'capital:proper');
+  assert.equal(issue.fixes[0].replacement, 'Acme Telecom');
+});
+
+test('check: results from the grammar libraries join the list, once, and can be switched off', () => {
+  const extra = [{ rule: 'grammar:test', category: 'grammar', start: 0, end: 2, text: 'We', message: 'x', fixes: [] }];
+  assert.ok(E.check('We went.', { extra }).some((i) => i.rule === 'grammar:test'));
+  const off = { ...E.DEFAULT_SETTINGS, checks: { ...E.DEFAULT_SETTINGS.checks, grammar: false } };
+  assert.ok(!E.check('We went.', { extra, settings: off }).some((i) => i.rule === 'grammar:test'));
+  const twice = extra.concat([{ ...extra[0], rule: 'grammar:other' }]);
+  assert.equal(E.check('We went.', { extra: twice }).filter((i) => i.category === 'grammar').length, 1);
 });

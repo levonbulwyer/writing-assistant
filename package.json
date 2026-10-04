@@ -16,5 +16,16 @@
     "nspell": "^2.1.5",
     "playwright": "^1.63.0"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "compromise": "^14.17.0",
+    "harper.js": "^2.10.0",
+    "retext-contractions": "^6.0.0",
+    "retext-english": "^5.0.0",
+    "retext-equality": "^7.1.0",
+    "retext-indefinite-article": "^5.0.0",
+    "retext-repeated-words": "^5.0.0",
+    "unified": "^11.0.5",
+    "vfile": "^6.0.3"
+  }
 }

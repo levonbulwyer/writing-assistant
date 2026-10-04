@@ -6,7 +6,7 @@ Phase 1 is built. Use its list to demo and test the app: each item says how to t
 
 ## 1. Scope and ground rules
 - [x] Message types: **General**, **Email**, **Complaint reply** (segmented control at the top).
-- [x] No network: `src/index.html` sets `default-src 'none'`. Test: open the built file, open DevTools → Network, use every feature. Only the file itself loads.
+- [x] No network: `src/index.html` sets `default-src 'none'` (plus `blob:` and `'wasm-unsafe-eval'` for the grammar engine). Test: open the built file, open DevTools → Network, use every feature. Only the file itself loads.
 - [x] Five sample texts in `src/rules.js`: messy, wordy, complaint, blunt, already fine. Pick them from **Try a sample**.
 - [x] One file: all word lists in `src/rules.js`, built into `dist/writing-assistant.html`.
 
@@ -80,6 +80,13 @@ Phase 1 is built. Use its list to demo and test the app: each item says how to t
 - [x] **Use Template**: replace the draft or insert at the cursor; the first blank is selected and **Tab** / **Shift+Tab** move between blanks.
 - [x] Edit, relabel and delete (delete asks to confirm).
 - [x] Export and import the whole library.
+
+## Added after Phase 1: commas, capitals and grammar
+- [x] Commas (own rules): after openers like “However”, before “but”, comma-joined sentences, greeting and sign-off. Test: type `Hi Sarah` then a blank line and `However we cannot help but we will call.`
+- [x] Capitals (own rules): sentence and line starts, I, days, titles, names in greetings and after sign-offs, places and brands. Add your own under Settings → Names to capitalise.
+- [x] Libraries: Harper (grammar), retext (a/an, apostrophes, insensitive wording), compromise (names and places). Each group has a switch in Settings → Checks. Test: footer says Grammar: ready after a few seconds.
+- [x] Fix Simple also applies our own comma and capital fixes.
+- [ ] Open the built file on the work computer and check that Grammar: ready appears (needs WebAssembly allowed). **Needs you.**
 
 ## Phase 2: Improvement pipeline
 

@@ -2,6 +2,7 @@
 import nspell from 'nspell';
 import { diffWordsWithSpace } from 'diff';
 import * as E from './engine.js';
+import * as X from './extras.js';
 import { SAMPLES, EXAMPLE_TEMPLATES, LABEL_GROUPS, AVOID_DEFAULT } from './rules.js';
 
 const VERSION = '1.0.0';
@@ -70,6 +71,8 @@ const state = {
   activeRef: null,
   filter: null,
   checker: null,
+  harperIssues: [],
+  harperText: '',
   suggestions: new Map(),
   history: [],
   flash: [],
@@ -197,6 +200,7 @@ function runCheck() {
     checker: state.checker,
     personal: state.dictionary,
     ignored: state.ignored,
+    extra: libraryIssues(text),
   });
   // Keep the same issue selected after the text changes, if it still exists.
   if (state.activeRef) {
@@ -217,6 +221,38 @@ function runCheck() {
   renderScoreStrip();
   updateButtons();
   queueSuggestions();
+}
+
+// Grammar libraries: the small ones answer straight away; Harper answers a moment after you stop typing.
+function libraryIssues(text) {
+  const own = X.libraryIssues(text, { checker: state.checker });
+  const harper = state.harperText === text ? state.harperIssues : X.carryOver(state.harperText, text, state.harperIssues);
+  scheduleHarper(text);
+  return harper.concat(own);
+}
+
+let harperTimer;
+function scheduleHarper(text) {
+  const on = state.settings.checks;
+  if (!X.harperReady() || text === state.harperText || (on.grammar === false && on.capital === false && on.punctuation === false)) return;
+  clearTimeout(harperTimer);
+  harperTimer = setTimeout(async () => {
+    const t = ta.value;
+    let found = [];
+    try { found = await X.harperIssues(t); } catch { found = []; }
+    if (ta.value !== t) return;
+    state.harperIssues = found;
+    state.harperText = t;
+    runCheck();
+  }, 450);
+}
+
+async function startHarper() {
+  const status = $('#grammar-status');
+  status.textContent = 'Grammar: loading…';
+  const ok = await X.loadHarper($('#harper-wasm').textContent);
+  status.textContent = ok ? 'Grammar: ready' : 'Grammar: basic checks only';
+  if (ok) runCheck();
 }
 
 function renderHighlights() {
@@ -305,8 +341,10 @@ function fixesFor(issue) {
 }
 
 const SIMPLE = new Set(['wordy', 'filler', 'shouty', 'repeat', 'avoid']);
+// Capitals and commas from our own rules are safe to apply in one go; guesses from the libraries are not.
+const isSure = (i) => ['capital', 'punctuation'].includes(i.category) && !i.rule.startsWith('harper:') && i.rule !== 'capital:guess';
 function simpleFixes() {
-  return state.issues.filter((i) => SIMPLE.has(i.category) && i.fixes.length).map((i) => i.fixes[0]);
+  return state.issues.filter((i) => (SIMPLE.has(i.category) || isSure(i)) && i.fixes.length).map((i) => i.fixes[0]);
 }
 
 function renderIssues() {
@@ -431,6 +469,17 @@ function ruleName(rule) {
   if (rule === 'shouty:caps') return 'Words in capitals';
   if (rule === 'shouty:multi') return 'Several exclamation marks';
   if (rule === 'shouty:exclaim') return 'More than one exclamation mark';
+  const NAMES = {
+    'punctuation:opener': 'Comma after an opener such as “However”', 'punctuation:splice': 'Comma joining two sentences',
+    'punctuation:but': 'Comma before “but”', 'punctuation:greeting': 'Comma after a greeting', 'punctuation:signoff': 'Comma after a sign-off',
+    'capital:i': 'Capital for “I”', 'capital:day': 'Capitals for days and months', 'capital:title': 'Capital for Mr, Mrs, Dr',
+    'capital:name': 'Capital for names', 'capital:line': 'Capital at the start of a line', 'capital:sentence': 'Capital at the start of a sentence',
+    'capital:proper': 'Capital for places and brands', 'capital:guess': 'Capital for guessed names and places',
+    'grammar:article': '“a” or “an”', 'grammar:apostrophe': 'Missing apostrophes',
+  };
+  if (NAMES[rule]) return NAMES[rule];
+  if (rule.startsWith('harper:')) return `Grammar: ${rule.slice(7).replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()}`;
+  if (rule.startsWith('inclusive:')) return `Wording: ${rule.slice(10).replace(/-/g, ' / ')}`;
   const [cat, phrase] = rule.split(/:(.*)/s);
   return phrase ? `${E.CATEGORIES[cat]?.name || cat}: ${phrase}` : rule;
 }
@@ -1101,6 +1150,10 @@ const CHECK_ROWS = [
   ['long', 'Long sentences', null],
   ['repeat', 'Repeated words', 'The same word twice close together'],
   ['shouty', 'Shouting', 'Words in capitals and extra exclamation marks'],
+  ['punctuation', 'Commas', 'After “However”, before “but”, in greetings and sign-offs'],
+  ['capital', 'Capital letters', 'Names, places, days, “I” and the start of sentences'],
+  ['grammar', 'Grammar', '“a” or “an”, its or it’s, agreement, missing apostrophes'],
+  ['inclusive', 'Inclusive wording', 'Words that can read as insensitive'],
   ['placeholder', 'Blanks to fill in', 'Template blanks like {{Customer name}}'],
 ];
 
@@ -1158,6 +1211,12 @@ function renderSettings() {
         <button type="button" class="text-button" data-reset-phrases>Reset to Defaults</button>
       </div>
       <p class="group-note">Leave “Suggest instead” empty for no automatic fix, or type (remove) to offer deleting the phrase.</p>
+    </div>
+
+    <h3 class="group-title">Names to capitalise</h3>
+    <div class="group">
+      <div class="field" style="display:block"><textarea id="proper-nouns" data-propernouns rows="4" placeholder="One per line: company names, products, places" aria-label="Names to capitalise">${esc((s.properNouns || []).join('\n'))}</textarea></div>
+      <p class="group-note">Words that always take a capital, such as a company or product name. Places like Auckland and Wellington are already built in.</p>
     </div>
 
     <h3 class="group-title">Personal dictionary</h3>
@@ -1240,6 +1299,7 @@ $('#settings-body').addEventListener('change', (e) => {
   if (cleanBox) { s.clean[cleanBox.dataset.clean] = cleanBox.checked; saveSettings(); return; }
   const check = e.target.closest('[data-check]');
   if (check) { s.checks[check.dataset.check] = check.checked; settingsChanged(); return; }
+  if (e.target.closest('[data-propernouns]')) { s.properNouns = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean); settingsChanged(); return; }
   const flag = e.target.closest('[data-flag]');
   if (flag) { s[flag.dataset.flag] = flag.checked; settingsChanged(); return; }
   const row = e.target.closest('.phrase-row[data-i]');
@@ -1297,6 +1357,7 @@ function start() {
   runCheck();
   autosize();
   setTimeout(loadDictionary, 60);
+  setTimeout(startHarper, 400);
   if (!storageOk) toast('This browser will not save your templates here. Export a backup to keep them.');
 }
 

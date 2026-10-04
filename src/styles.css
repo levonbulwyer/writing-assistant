@@ -219,6 +219,10 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .backdrop span { border-radius: 3px; text-decoration-skip-ink: none; text-underline-offset: 4px; text-decoration-thickness: 2px; }
 .u-spelling { text-decoration: underline wavy var(--red); text-decoration-thickness: 1.5px !important; }
 .u-shouty, .u-avoid, .u-repeat { text-decoration: underline var(--orange); }
+.u-punctuation { text-decoration: underline #30b0c7; }
+.u-capital { text-decoration: underline var(--purple); }
+.u-grammar { text-decoration: underline wavy #34c759; text-decoration-thickness: 1.5px !important; }
+.u-inclusive { text-decoration: underline dotted #8e8e93; }
 .u-wordy, .u-filler, .u-passive { text-decoration: underline rgba(0, 122, 255, 0.75); }
 .bg-long { background: rgba(255, 204, 0, 0.2); border-radius: 0 !important; }
 .bg-fill { background: rgba(175, 82, 222, 0.16); box-shadow: 0 0 0 1px rgba(175, 82, 222, 0.35); }
@@ -266,6 +270,9 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .tone-blue .dot, .dot.tone-blue { background: var(--blue); }
 .tone-yellow .dot, .dot.tone-yellow { background: var(--yellow); }
 .tone-purple .dot, .dot.tone-purple { background: var(--purple); }
+.tone-teal .dot, .dot.tone-teal { background: #30b0c7; }
+.tone-green .dot, .dot.tone-green { background: #34c759; }
+.tone-gray .dot, .dot.tone-gray { background: #8e8e93; }
 
 .issue {
   background: var(--surface);

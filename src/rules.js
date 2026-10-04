@@ -223,3 +223,33 @@ export const LABEL_GROUPS = [
   { key: 'situation', name: 'Situation', options: ['First contact', 'Follow-up', 'Apology', 'Escalation', 'Declined request', 'Good news'] },
   { key: 'tone', name: 'Tone', options: ['Warm', 'Neutral', 'Firm'] },
 ];
+
+// ───────────────────────────── Commas and capitals ─────────────────────────────
+// Add to these lists as you find missed problems. Then run `npm run build`.
+
+// Openers that need a comma after them at the start of a sentence: "However, we ..."
+export const COMMA_OPENERS = [
+  'However', 'Unfortunately', 'Fortunately', 'Therefore', 'Otherwise', 'Meanwhile', 'Additionally',
+  'Furthermore', 'Moreover', 'Finally', 'Firstly', 'Secondly', 'Thirdly', 'Sadly',
+  'Consequently', 'Nevertheless', 'Alternatively', 'Likewise',
+  'In addition', 'For example', 'For instance', 'As a result', 'In the meantime', 'Of course',
+  'On the other hand', 'In fact', 'In summary', 'In conclusion',
+  'By the way', 'For now',
+  'In this case', 'In that case', 'That said', 'Even so', 'Either way', 'First of all',
+];
+
+// "…, however, …" joined with only a comma needs a full stop or semicolon.
+export const SPLICE_WORDS = ['however', 'therefore', 'moreover', 'furthermore', 'nevertheless', 'consequently'];
+
+// Sign-offs that take a comma: "Kind regards,"
+export const SIGNOFF_NEEDS_COMMA = [
+  'kind regards', 'warm regards', 'best regards', 'regards', 'yours sincerely', 'yours faithfully',
+  'sincerely', 'best wishes', 'many thanks', 'ngā mihi', 'nga mihi', 'ngā mihi nui', 'nga mihi nui',
+];
+
+// Titles that always take a capital.
+export const TITLES = ['mr', 'mrs', 'ms', 'mx', 'dr'];
+
+// Places, organisations and words that always take a capital. Words that are also ordinary words
+// ("spark", "one", "kiwi") are left out on purpose, or they would be flagged all the time.
+export const PROPER_NOUNS = `New Zealand|Aotearoa|Auckland|Wellington|Christchurch|Hamilton|Tauranga|Dunedin|Palmerston North|Napier|Hastings|Nelson|Rotorua|Whangārei|Whangarei|Invercargill|Queenstown|Whanganui|Gisborne|Timaru|Blenheim|Taupō|Taupo|New Plymouth|Porirua|Lower Hutt|Upper Hutt|Hutt Valley|Waikato|Canterbury|Otago|Southland|Northland|Taranaki|Manawatū|Manawatu|Marlborough|Hawke's Bay|Hawkes Bay|Bay of Plenty|North Island|South Island|Stewart Island|Chatham Islands|Australia|Sydney|Melbourne|Brisbane|Perth|England|Scotland|Ireland|Europe|Asia|Māori|Maori|Pākehā|Pakeha|Pasifika|Facebook|Instagram|LinkedIn|Google|Microsoft|PowerPoint|Android|iPhone|Samsung|Netflix|Spotify|Skype|WhatsApp|YouTube|Christmas|Easter|Waitangi Day|Anzac Day|Matariki|Labour Day|Boxing Day|New Year's Day`.split('|');

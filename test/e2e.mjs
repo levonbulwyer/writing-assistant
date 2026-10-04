@@ -3,15 +3,18 @@
 // network request, console error or broken step. Screenshots go to ./screenshots.
 import { chromium } from 'playwright';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const file = 'file://' + path.join(root, 'dist/writing-assistant.html');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const file = pathToFileURL(path.join(root, 'dist/writing-assistant.html')).href;
 const shots = process.env.SHOTS || path.join(root, 'screenshots');
 fs.mkdirSync(shots, { recursive: true });
 
-const browser = await chromium.launch(fs.existsSync('/opt/pw-browsers/chromium') ? { executablePath: '/opt/pw-browsers/chromium' } : {});
+const launchOptions = fs.existsSync('/opt/pw-browsers/chromium') ? { executablePath: '/opt/pw-browsers/chromium' } : {};
+// Falls back to the installed Google Chrome if Playwright's own Chromium has not been downloaded
+const browser = await chromium.launch(launchOptions).catch(() => chromium.launch({ channel: 'chrome' }));
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true, permissions: ['clipboard-read', 'clipboard-write'] });
 const page = await context.newPage();
 
@@ -136,17 +139,21 @@ await step('Clean switches and Clean when I paste', async () => {
 });
 
 await step('spelling: suggestions and add to dictionary', async () => {
-  await page.waitForSelector('.issue.tone-red [data-fix]', { timeout: 5000 });
+  await page.waitForSelector('.issue.tone-purple [data-fix]', { timeout: 5000 });
   assert.match(await editor.inputValue(), /doesn’t arrive/, 'Clean added the apostrophe');
+  // A lower-case place name is a capital-letter issue, shown once and not as a spelling error
   const card = page.locator('.issue', { hasText: 'auckland' }).first();
   await card.click();
   await page.waitForSelector('.issue.active [data-fix="0"]');
-  assert.equal((await page.locator('.issue.active [data-fix="0"]').textContent()).trim(), 'Auckland');
-  const auck = page.locator('.issue', { hasText: 'auckland' }).first();
-  await auck.click();
-  await auck.locator('[data-act="add-word"]').click();
+  assert.equal((await page.locator('.issue.active [data-fix="0"]').textContent()).trim(), 'Change to “Auckland”');
+  assert.equal(await page.locator('.issue.tone-red', { hasText: 'auckland' }).count(), 0);
+  await setText('Please ask about the zorptax today.');
+  await page.waitForSelector('.issue.tone-red:has-text("zorptax")', { timeout: 5000 });
+  const word = page.locator('.issue.tone-red', { hasText: 'zorptax' }).first();
+  await word.click();
+  await word.locator('[data-act="add-word"]').click();
   await page.waitForTimeout(200);
-  assert.equal(await page.locator('.issue', { hasText: 'auckland' }).count(), 0);
+  assert.equal(await page.locator('.issue', { hasText: 'zorptax' }).count(), 0);
 });
 
 await step('checklist ticks itself for a complaint reply', async () => {
@@ -248,7 +255,7 @@ await step('export and import a backup', async () => {
   const data = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
   assert.equal(data.app, 'writing-assistant');
   assert.ok(data.templates.some((t) => t.title === 'Missed visit, rebooked'));
-  assert.ok(data.dictionary.includes('auckland'));
+  assert.ok(data.dictionary.includes('zorptax'));
   // Wipe the library, then import
   await page.evaluate(() => { localStorage.setItem('wa.v1.templates', '[]'); });
   await page.reload();
@@ -311,6 +318,24 @@ await step('phone layout has no sideways scroll', async () => {
   assert.ok(wide <= 390, `page is ${wide}px wide`);
   await shot('10-phone');
   await page.setViewportSize({ width: 1440, height: 900 });
+});
+
+await step('commas, capitals and grammar: our rules, the small libraries and Harper', async () => {
+  await page.waitForFunction(() => document.querySelector('#grammar-status').textContent.includes('ready'), null, { timeout: 60000 });
+  await page.evaluate(() => { document.querySelector('#panel-control [data-panel=\"issues\"]')?.click(); });
+  await setText('hi john\n\nHowever I spoke to mr patel in auckland. It was a hour wait but we has fixed it.\n\nKind regards\nalex');
+  await page.waitForSelector('.issue.tone-green', { timeout: 8000 }); // Harper or the a/an check
+  const chips = (await page.locator('.chips .chip').allTextContents()).join(' ');
+  for (const name of ['Punctuation', 'Capital letters', 'Grammar']) assert.match(chips, new RegExp(name), name);
+  const text = await page.locator('#panel-issues').textContent();
+  assert.match(text, /comma after “However”/i);
+  assert.match(text, /“Auckland” takes a capital/);
+  await page.click('[data-act="fix-all"]');
+  await page.waitForTimeout(400);
+  const fixed = await editor.inputValue();
+  assert.match(fixed, /^Hi John,/);
+  assert.match(fixed, /However, I spoke to Mr Patel in Auckland/);
+  assert.match(fixed, /Kind regards,\nAlex/);
 });
 
 await step('no network requests and no errors', async () => {
