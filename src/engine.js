@@ -393,18 +393,78 @@ function dropContained(issues) {
   return issues.filter((a) => !issues.some((b) => b !== a && b.start <= a.start && b.end >= a.end && (b.end - b.start) > (a.end - a.start)));
 }
 
+// Past tense for the irregular participles in rules.js. A regular participle ("processed") is its own past tense.
+const PAST_OF = {
+  done: 'did', given: 'gave', taken: 'took', seen: 'saw', known: 'knew', written: 'wrote', shown: 'showed',
+  chosen: 'chose', broken: 'broke', spoken: 'spoke', forgotten: 'forgot', begun: 'began', drawn: 'drew',
+  driven: 'drove', eaten: 'ate',
+};
+const SAME_PAST = new Set('made sent told paid found held kept left built brought bought caught taught thought sold'.split(' '));
+const DETERMINERS = new Set('the a an your our my this that these those his her their its'.split(' '));
+const NOT_SUBJECTS = new Set('i we you they he she it there which who what when where if because and but so as that'.split(' '));
+const NOT_AGENTS = /^(?:(?:mon|tues|wednes|thurs|fri|satur|sun)day|today|tomorrow|tonight|yesterday|noon|midday|midnight|the end|end of|next|this|last|\d|eod|cob|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|then|now|which|when|the time)/i;
+const PASSIVE_TIPS = 'Possible passive voice. Say who did it: “We sent the form” reads better than “The form was sent”.';
+
+// Builds “Our team processed your refund” from “Your refund was processed by our team”.
+// Only the past tense and the present perfect are rewritten; other tenses get the advice only.
+function passiveRewrites(text, m, auxStart, participle, sentence) {
+  const aux = m[1].toLowerCase();
+  const perfect = m[2] ? m[2].toLowerCase() : null;
+  const past = PAST_OF[participle] || (SAME_PAST.has(participle) ? participle : /ed$/.test(participle) ? participle : null);
+  if (!past) return [];
+  const tense = perfect && aux === 'been' ? 'perfect' : (aux === 'was' || aux === 'were') && !perfect ? 'past' : null;
+  if (!tense) return [];
+  // The clause the passive sits in: from the sentence start, or after a comma or “that”, “because”…
+  const before = text.slice(sentence.start, auxStart);
+  let clauseStart = sentence.start;
+  const cut = /(?:,|;)\s+|\b(?:that|because|and|but|so|as|when|if|while)\s+/gi;
+  let c;
+  while ((c = cut.exec(before))) clauseStart = sentence.start + c.index + c[0].length;
+  const subject = text.slice(clauseStart, auxStart).trim();
+  const firstWord = (subject.match(/^[\p{L}'’-]+/u) || [''])[0].toLowerCase();
+  const nWords = words(subject).length;
+  if (!subject || nWords > 8 || NOT_SUBJECTS.has(firstWord) || /[,;:()]/.test(subject)) return [];
+  const atStart = clauseStart === sentence.start;
+  const subj = DETERMINERS.has(firstWord) ? subject.charAt(0).toLowerCase() + subject.slice(1) : subject;
+
+  const partEnd = m.index + m[0].length;
+  const tail = text.slice(partEnd);
+  const by = tail.match(/^\s+by\s+([^,.;:!?\n]+?)(?=\s+(?:on|in|at|to|for|from|before|after|within|until|so|and|but|because|when|if)\b|[,.;:!?\n]|$)/i);
+  const agent = by && !NOT_AGENTS.test(by[1].trim()) ? by[1].trim() : null;
+  const end = agent ? partEnd + by[0].length : partEnd;
+  const verb = tense === 'perfect' ? participle : past;
+
+  const make = (who) => {
+    const lead = atStart ? who.charAt(0).toUpperCase() + who.slice(1) : who;
+    let have = '';
+    if (tense === 'perfect') have = /^(i|we|you|they)$/i.test(who) || (/s$/i.test(who) && !/ss$/i.test(who)) ? ' have' : ' has';
+    const rep = `${lead}${have} ${verb} ${subj}`;
+    const shown = (rep + text.slice(end).split(/[.!?\n]/)[0]).trim();
+    return { label: shown.length > 56 ? shown.slice(0, 54).replace(/\s+\S*$/, '') + '…' : shown, start: clauseStart, end, replacement: rep };
+  };
+  return agent ? [make(agent)] : [make('we'), make('I')];
+}
+
 function passiveIssues(text) {
   const out = [];
   const re = new RegExp(`\\b(am|is|are|was|were|be|been|being|get|gets|got|getting|gotten)\\s+(?:(\\w+ly)\\s+)?(\\w+ed|${IRREGULAR_PARTICIPLES.join('|')})\\b`, 'gi');
+  const sents = sentences(text);
   let m;
   while ((m = re.exec(text))) {
     const participle = m[3].toLowerCase();
     if (NOT_PASSIVE.has(participle)) continue;
     if (/^(need|feed|seed|speed|bleed|breed|weed|indeed|exceed|proceed|succeed|bed|red|shed|wed|led|fed)$/.test(participle)) continue;
+    // “has been sent”: take the helper word too, so the highlight reads as the whole verb
+    const lead = text.slice(0, m.index).match(/\b(has|have|had)\s+$/i);
+    const start = lead && m[1].toLowerCase() === 'been' ? m.index - lead[0].length : m.index;
+    const sentence = sents.find((s) => s.start <= m.index && s.end >= m.index + m[0].length);
+    const fixes = sentence ? passiveRewrites(text, { 0: m[0], 1: m[1], 2: lead && m[1].toLowerCase() === 'been' ? lead[1] : null, index: m.index }, start, participle, sentence) : [];
     out.push({
-      rule: 'passive', category: 'passive', start: m.index, end: m.index + m[0].length, text: m[0],
-      message: 'Possible passive voice. Say who did it: “We sent the form” reads better than “The form was sent”.',
-      fixes: [],
+      rule: 'passive', category: 'passive', start, end: m.index + m[0].length, text: text.slice(start, m.index + m[0].length),
+      message: fixes.length
+        ? 'Possible passive voice. Saying who did it is clearer and sounds more helpful. Pick a rewrite, or keep it if the “who” does not matter.'
+        : PASSIVE_TIPS + ' If the “who” does not matter, or you do not know, the passive is fine.',
+      fixes,
     });
   }
   return out;

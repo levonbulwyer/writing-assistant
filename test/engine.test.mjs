@@ -248,3 +248,18 @@ test('check: results from the grammar libraries join the list, once, and can be 
   const twice = extra.concat([{ ...extra[0], rule: 'grammar:other' }]);
   assert.equal(E.check('We went.', { extra: twice }).filter((i) => i.category === 'grammar').length, 1);
 });
+
+test('passive: offers rewrites that say who did it', () => {
+  const only = { ...E.DEFAULT_SETTINGS, checks: { passive: true } };
+  const fixes = (t) => E.check(t, { settings: only }).filter((i) => i.category === 'passive').flatMap((i) => i.fixes.map((f) => E.applyFixes(t, [f])));
+  assert.deepEqual(fixes('Your refund was processed by our team on Monday.'), ['Our team processed your refund on Monday.']);
+  assert.deepEqual(fixes('The form has been sent.'), ['We have sent the form.', 'I have sent the form.']);
+  assert.deepEqual(fixes('Thank you for waiting. Your complaint was escalated to our manager.'), [
+    'Thank you for waiting. We escalated your complaint to our manager.',
+    'Thank you for waiting. I escalated your complaint to our manager.',
+  ]);
+  // “by Friday” is a deadline, not who did it; other tenses and dummy subjects get advice only
+  assert.deepEqual(fixes('The form was sent by Friday.'), ['We sent the form by Friday.', 'I sent the form by Friday.']);
+  assert.deepEqual(fixes('It was decided.'), []);
+  assert.deepEqual(fixes('Calls are recorded for training.'), []);
+});

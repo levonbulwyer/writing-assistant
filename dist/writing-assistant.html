@@ -53021,22 +53021,83 @@ Kind regards,
   function dropContained(issues) {
     return issues.filter((a3) => !issues.some((b) => b !== a3 && b.start <= a3.start && b.end >= a3.end && b.end - b.start > a3.end - a3.start));
   }
+  var PAST_OF = {
+    done: "did",
+    given: "gave",
+    taken: "took",
+    seen: "saw",
+    known: "knew",
+    written: "wrote",
+    shown: "showed",
+    chosen: "chose",
+    broken: "broke",
+    spoken: "spoke",
+    forgotten: "forgot",
+    begun: "began",
+    drawn: "drew",
+    driven: "drove",
+    eaten: "ate"
+  };
+  var SAME_PAST = new Set("made sent told paid found held kept left built brought bought caught taught thought sold".split(" "));
+  var DETERMINERS = new Set("the a an your our my this that these those his her their its".split(" "));
+  var NOT_SUBJECTS = new Set("i we you they he she it there which who what when where if because and but so as that".split(" "));
+  var NOT_AGENTS = /^(?:(?:mon|tues|wednes|thurs|fri|satur|sun)day|today|tomorrow|tonight|yesterday|noon|midday|midnight|the end|end of|next|this|last|\d|eod|cob|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|then|now|which|when|the time)/i;
+  var PASSIVE_TIPS = "Possible passive voice. Say who did it: “We sent the form” reads better than “The form was sent”.";
+  function passiveRewrites(text, m3, auxStart, participle, sentence) {
+    const aux = m3[1].toLowerCase();
+    const perfect = m3[2] ? m3[2].toLowerCase() : null;
+    const past3 = PAST_OF[participle] || (SAME_PAST.has(participle) ? participle : /ed$/.test(participle) ? participle : null);
+    if (!past3) return [];
+    const tense = perfect && aux === "been" ? "perfect" : (aux === "was" || aux === "were") && !perfect ? "past" : null;
+    if (!tense) return [];
+    const before2 = text.slice(sentence.start, auxStart);
+    let clauseStart = sentence.start;
+    const cut = /(?:,|;)\s+|\b(?:that|because|and|but|so|as|when|if|while)\s+/gi;
+    let c2;
+    while (c2 = cut.exec(before2)) clauseStart = sentence.start + c2.index + c2[0].length;
+    const subject = text.slice(clauseStart, auxStart).trim();
+    const firstWord2 = (subject.match(/^[\p{L}'’-]+/u) || [""])[0].toLowerCase();
+    const nWords = words(subject).length;
+    if (!subject || nWords > 8 || NOT_SUBJECTS.has(firstWord2) || /[,;:()]/.test(subject)) return [];
+    const atStart = clauseStart === sentence.start;
+    const subj = DETERMINERS.has(firstWord2) ? subject.charAt(0).toLowerCase() + subject.slice(1) : subject;
+    const partEnd = m3.index + m3[0].length;
+    const tail = text.slice(partEnd);
+    const by = tail.match(/^\s+by\s+([^,.;:!?\n]+?)(?=\s+(?:on|in|at|to|for|from|before|after|within|until|so|and|but|because|when|if)\b|[,.;:!?\n]|$)/i);
+    const agent = by && !NOT_AGENTS.test(by[1].trim()) ? by[1].trim() : null;
+    const end2 = agent ? partEnd + by[0].length : partEnd;
+    const verb = tense === "perfect" ? participle : past3;
+    const make = (who) => {
+      const lead = atStart ? who.charAt(0).toUpperCase() + who.slice(1) : who;
+      let have = "";
+      if (tense === "perfect") have = /^(i|we|you|they)$/i.test(who) || /s$/i.test(who) && !/ss$/i.test(who) ? " have" : " has";
+      const rep = `${lead}${have} ${verb} ${subj}`;
+      const shown = (rep + text.slice(end2).split(/[.!?\n]/)[0]).trim();
+      return { label: shown.length > 56 ? shown.slice(0, 54).replace(/\s+\S*$/, "") + "…" : shown, start: clauseStart, end: end2, replacement: rep };
+    };
+    return agent ? [make(agent)] : [make("we"), make("I")];
+  }
   function passiveIssues(text) {
     const out2 = [];
     const re = new RegExp(`\\b(am|is|are|was|were|be|been|being|get|gets|got|getting|gotten)\\s+(?:(\\w+ly)\\s+)?(\\w+ed|${IRREGULAR_PARTICIPLES.join("|")})\\b`, "gi");
+    const sents = sentences(text);
     let m3;
     while (m3 = re.exec(text)) {
       const participle = m3[3].toLowerCase();
       if (NOT_PASSIVE.has(participle)) continue;
       if (/^(need|feed|seed|speed|bleed|breed|weed|indeed|exceed|proceed|succeed|bed|red|shed|wed|led|fed)$/.test(participle)) continue;
+      const lead = text.slice(0, m3.index).match(/\b(has|have|had)\s+$/i);
+      const start3 = lead && m3[1].toLowerCase() === "been" ? m3.index - lead[0].length : m3.index;
+      const sentence = sents.find((s3) => s3.start <= m3.index && s3.end >= m3.index + m3[0].length);
+      const fixes = sentence ? passiveRewrites(text, { 0: m3[0], 1: m3[1], 2: lead && m3[1].toLowerCase() === "been" ? lead[1] : null, index: m3.index }, start3, participle, sentence) : [];
       out2.push({
         rule: "passive",
         category: "passive",
-        start: m3.index,
+        start: start3,
         end: m3.index + m3[0].length,
-        text: m3[0],
-        message: "Possible passive voice. Say who did it: “We sent the form” reads better than “The form was sent”.",
-        fixes: []
+        text: text.slice(start3, m3.index + m3[0].length),
+        message: fixes.length ? "Possible passive voice. Saying who did it is clearer and sounds more helpful. Pick a rewrite, or keep it if the “who” does not matter." : PASSIVE_TIPS + " If the “who” does not matter, or you do not know, the passive is fine.",
+        fixes
       });
     }
     return out2;
