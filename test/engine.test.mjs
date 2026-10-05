@@ -258,10 +258,9 @@ test('passive: offers rewrites that say who did it', () => {
     'Thank you for waiting. We escalated your complaint to our manager.',
     'Thank you for waiting. I escalated your complaint to our manager.',
   ]);
-  // “by Friday” is a deadline, not who did it; other tenses and dummy subjects get advice only
+  // “by Friday” is a deadline, not who did it; dummy subjects get advice only
   assert.deepEqual(fixes('The form was sent by Friday.'), ['We sent the form by Friday.', 'I sent the form by Friday.']);
   assert.deepEqual(fixes('It was decided.'), []);
-  assert.deepEqual(fixes('Calls are recorded for training.'), []);
 });
 
 test('work-email phrases and vague wording', () => {
@@ -273,4 +272,27 @@ test('work-email phrases and vague wording', () => {
   assert.deepEqual(found('Please revert back to us.'), [['wordy', 'revert back', 'reply']]);
   const off = { ...only, checks: { wordy: true, vague: false } };
   assert.deepEqual(E.check('We will call you soon.', { settings: off }), []);
+});
+
+test('passive: rewrites in every common tense', () => {
+  const only = { ...E.DEFAULT_SETTINGS, checks: { passive: true } };
+  const first = (t) => E.check(t, { settings: only, checker: speller }).filter((i) => i.category === 'passive').flatMap((i) => i.fixes.map((f) => E.applyFixes(t, [f])))[0] ?? null;
+  const cases = {
+    'Your request is being processed.': 'We are processing your request.',
+    'Your refund will be processed within three days.': 'We will process your refund within three days.',
+    'Your refund will be processed by our billing team.': 'Our billing team will process your refund.',
+    'Calls are recorded for training.': 'We record calls for training.',
+    'Calls are recorded by our team for training.': 'Our team records calls for training.',
+    'Your payment was not received.': 'We did not receive your payment.',
+    'You will be contacted by our team.': 'Our team will contact you.',
+    'You were charged twice.': 'We charged you twice.',
+    'The account has been updated.': 'We have updated the account.',
+    'Your complaint was quickly escalated.': 'We quickly escalated your complaint.',
+    'The form should be signed and returned.': 'We should sign and return the form.',
+    'The report was written by Mere.': 'Mere wrote the report.',
+    'I can confirm that your account was credited by the billing team.': 'I can confirm that the billing team credited your account.',
+  };
+  for (const [from, to] of Object.entries(cases)) assert.equal(first(from), to, from);
+  // “I was told” has no usable agent, so nothing is invented
+  assert.equal(first('We were told to wait.'), null);
 });

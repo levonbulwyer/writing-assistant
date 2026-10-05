@@ -394,76 +394,152 @@ function dropContained(issues) {
   return issues.filter((a) => !issues.some((b) => b !== a && b.start <= a.start && b.end >= a.end && (b.end - b.start) > (a.end - a.start)));
 }
 
-// Past tense for the irregular participles in rules.js. A regular participle ("processed") is its own past tense.
-const PAST_OF = {
-  done: 'did', given: 'gave', taken: 'took', seen: 'saw', known: 'knew', written: 'wrote', shown: 'showed',
-  chosen: 'chose', broken: 'broke', spoken: 'spoke', forgotten: 'forgot', begun: 'began', drawn: 'drew',
-  driven: 'drove', eaten: 'ate',
+// ───────────────────────────── Passive voice rewrites ─────────────────────────────
+
+// Irregular verbs: participle → [base, past]. A regular verb ("processed") works out its own forms.
+const IRREGULAR_VERBS = {
+  done: ['do', 'did'], given: ['give', 'gave'], taken: ['take', 'took'], seen: ['see', 'saw'], known: ['know', 'knew'],
+  written: ['write', 'wrote'], shown: ['show', 'showed'], chosen: ['choose', 'chose'], broken: ['break', 'broke'],
+  spoken: ['speak', 'spoke'], forgotten: ['forget', 'forgot'], begun: ['begin', 'began'], drawn: ['draw', 'drew'],
+  driven: ['drive', 'drove'], eaten: ['eat', 'ate'], made: ['make', 'made'], sent: ['send', 'sent'], told: ['tell', 'told'],
+  paid: ['pay', 'paid'], found: ['find', 'found'], held: ['hold', 'held'], kept: ['keep', 'kept'], left: ['leave', 'left'],
+  built: ['build', 'built'], brought: ['bring', 'brought'], bought: ['buy', 'bought'], caught: ['catch', 'caught'],
+  taught: ['teach', 'taught'], thought: ['think', 'thought'], sold: ['sell', 'sold'],
 };
-const SAME_PAST = new Set('made sent told paid found held kept left built brought bought caught taught thought sold'.split(' '));
 const DETERMINERS = new Set('the a an your our my this that these those his her their its'.split(' '));
-const NOT_SUBJECTS = new Set('i we you they he she it there which who what when where if because and but so as that'.split(' '));
+const NOT_SUBJECTS = new Set('it there which who what when where if because and but so as that'.split(' '));
+const TO_OBJECT = { you: 'you', he: 'him', she: 'her', they: 'them', i: 'me', we: 'us' };
+const TO_SUBJECT = { me: 'I', us: 'we', him: 'he', her: 'she', them: 'they' };
+const MODALS = new Set('will would can could should must may might shall'.split(' '));
 const NOT_AGENTS = /^(?:(?:mon|tues|wednes|thurs|fri|satur|sun)day|today|tomorrow|tonight|yesterday|noon|midday|midnight|the end|end of|next|this|last|\d|eod|cob|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|then|now|which|when|the time)/i;
+const BY_AGENT = /^\s+by\s+([^,.;:!?\n]+?)(?=\s+(?:on|in|at|to|for|from|before|after|within|until|so|and|but|because|when|if)\b|[,.;:!?\n]|$)/i;
 const PASSIVE_TIPS = 'Possible passive voice. Say who did it: “We sent the form” reads better than “The form was sent”.';
 
+// Works out base, past, -s and -ing forms. Candidates are checked against the spelling dictionary
+// when there is one, so “updated” becomes “update” and not “updat”.
+function verbForms(participle, checker) {
+  const ok = (w) => !checker || checker.correct(w);
+  let base, past;
+  if (IRREGULAR_VERBS[participle]) [base, past] = IRREGULAR_VERBS[participle];
+  else if (/ed$/.test(participle)) {
+    past = participle;
+    const cands = [];
+    if (/ied$/.test(participle)) cands.push(participle.slice(0, -3) + 'y');
+    if (/([^aeiou])\1ed$/.test(participle)) cands.push(participle.slice(0, -3));
+    cands.push(participle.slice(0, -2), participle.slice(0, -1));
+    const pref = /(at|iz|is|ov|ur|us|ag|ak|ir|ar|ac|ul|ib|ud|ng|rg|nc)ed$/.test(participle) ? [participle.slice(0, -1), participle.slice(0, -2)] : null;
+    const order = checker ? cands : (pref ? pref.concat(cands) : cands);
+    base = order.find((c) => c.length > 1 && ok(c));
+  }
+  if (!base || !past) return null;
+  const third = /(s|x|z|ch|sh)$/.test(base) ? base + 'es' : /[^aeiou]y$/.test(base) ? base.slice(0, -1) + 'ies' : base === 'do' ? 'does' : base + 's';
+  const ingCands = [];
+  if (/ie$/.test(base)) ingCands.push(base.slice(0, -2) + 'ying');
+  if (/[^e]e$/.test(base)) ingCands.push(base.slice(0, -1) + 'ing');
+  ingCands.push(base + 'ing', base + base.slice(-1) + 'ing');
+  const ing = ingCands.find((c) => !checker || checker.correct(c)) || ingCands[0];
+  return { base, past, part: participle, third, ing };
+}
+
+const isPlural = (who) => /^(i|we|you|they)$/i.test(who) || (/s$/i.test(who) && !/ss$/i.test(who));
+
 // Builds “Our team processed your refund” from “Your refund was processed by our team”.
-// Only the past tense and the present perfect are rewritten; other tenses get the advice only.
-function passiveRewrites(text, m, auxStart, participle, sentence) {
-  const aux = m[1].toLowerCase();
-  const perfect = m[2] ? m[2].toLowerCase() : null;
-  const past = PAST_OF[participle] || (SAME_PAST.has(participle) ? participle : /ed$/.test(participle) ? participle : null);
-  if (!past) return [];
-  const tense = perfect && aux === 'been' ? 'perfect' : (aux === 'was' || aux === 'were') && !perfect ? 'past' : null;
+function passiveRewrites(text, info, sentence, checker) {
+  const { aux, lead, neg, adverb, participle, index, matchEnd, start } = info;
+  const forms = verbForms(participle, checker);
+  if (!forms) return [];
+  let tense = null;
+  if ((aux === 'was' || aux === 'were') && !lead) tense = 'past';
+  else if (/^(is|are|am)$/.test(aux) && !lead) tense = 'present';
+  else if (aux === 'be' && lead && MODALS.has(lead)) tense = 'modal';
+  else if (aux === 'been' && lead === 'had') tense = 'pastperfect';
+  else if (aux === 'been' && /^(has|have)$/.test(lead || '')) tense = 'perfect';
+  else if (aux === 'being' && /^(is|are|am|was|were)$/.test(lead || '')) tense = 'progressive';
   if (!tense) return [];
+
   // The clause the passive sits in: from the sentence start, or after a comma or “that”, “because”…
-  const before = text.slice(sentence.start, auxStart);
+  const before = text.slice(sentence.start, start);
   let clauseStart = sentence.start;
   const cut = /(?:,|;)\s+|\b(?:that|because|and|but|so|as|when|if|while)\s+/gi;
   let c;
   while ((c = cut.exec(before))) clauseStart = sentence.start + c.index + c[0].length;
-  const subject = text.slice(clauseStart, auxStart).trim();
-  const firstWord = (subject.match(/^[\p{L}'’-]+/u) || [''])[0].toLowerCase();
-  const nWords = words(subject).length;
-  if (!subject || nWords > 8 || NOT_SUBJECTS.has(firstWord) || /[,;:()]/.test(subject)) return [];
   const atStart = clauseStart === sentence.start;
-  const subj = DETERMINERS.has(firstWord) ? subject.charAt(0).toLowerCase() + subject.slice(1) : subject;
+  const subject = text.slice(clauseStart, start).trim();
+  const firstWord = (subject.match(/^[\p{L}'’-]+/u) || [''])[0].toLowerCase();
+  const pronoun = /^(you|he|she|they|i|we)$/.test(subject.toLowerCase());
+  if (!subject || words(subject).length > 8 || NOT_SUBJECTS.has(firstWord) || /[,;:()]/.test(subject)) return [];
+  if (!pronoun && /^(i|we|you|he|she|they)$/.test(firstWord)) return [];
+  // “Your refund” and “Calls” become lower case in the middle of the new sentence; a name keeps its capital
+  const looksLikeName = /^\p{Lu}/u.test(subject) && (/^[\p{L}'’-]+['’]s\b/u.test(subject) || !checker || !checker.correct(firstWord)
+    || new RegExp(`[^.!?\\n]\\s${escapeRegex(firstWord)}\\b`).test(text.replace(subject, '')) || /^\p{Lu}/u.test(subject.split(/\s+/)[1] || ''));
+  let obj = pronoun ? TO_OBJECT[subject.toLowerCase()] : (DETERMINERS.has(firstWord) || (atStart && !looksLikeName) ? subject.charAt(0).toLowerCase() + subject.slice(1) : subject);
 
-  const partEnd = m.index + m[0].length;
-  const tail = text.slice(partEnd);
-  const by = tail.match(/^\s+by\s+([^,.;:!?\n]+?)(?=\s+(?:on|in|at|to|for|from|before|after|within|until|so|and|but|because|when|if)\b|[,.;:!?\n]|$)/i);
-  const agent = by && !NOT_AGENTS.test(by[1].trim()) ? by[1].trim() : null;
-  const end = agent ? partEnd + by[0].length : partEnd;
-  const verb = tense === 'perfect' ? participle : past;
+  const tail = text.slice(matchEnd);
+  const by = tail.match(BY_AGENT);
+  // “signed and returned”: two verbs share one subject and one object
+  const pair = tail.match(new RegExp(`^\\s+(and|or)\\s+(\\w+ed|${IRREGULAR_PARTICIPLES.join('|')})\\b`, 'i'));
+  const forms2 = pair ? verbForms(pair[2].toLowerCase(), checker) : null;
+  if (pair && !forms2) return [];
+  const afterPair = pair ? tail.slice(pair[0].length) : tail;
+  const by2 = pair ? afterPair.match(BY_AGENT) : by;
+  const agent = by2 && !NOT_AGENTS.test(by2[1].trim()) ? by2[1].trim() : null;
+  // “I was told” / “We were charged” with no agent would turn into nonsense: leave those alone
+  if (!agent && /^(i|we)$/.test(subject.toLowerCase())) return [];
+  const end = matchEnd + (pair ? pair[0].length : 0) + (agent ? by2[0].length : 0);
+  const adv = adverb ? adverb.toLowerCase() : '';
 
-  const make = (who) => {
-    const lead = atStart ? who.charAt(0).toUpperCase() + who.slice(1) : who;
-    let have = '';
-    if (tense === 'perfect') have = /^(i|we|you|they)$/i.test(who) || (/s$/i.test(who) && !/ss$/i.test(who)) ? ' have' : ' has';
-    const rep = `${lead}${have} ${verb} ${subj}`;
+  const make = (whoRaw) => {
+    const who = TO_SUBJECT[whoRaw.toLowerCase()] || whoRaw;
+    const plural = isPlural(who);
+    const A = (...w) => w.filter(Boolean).join(' ');
+    // Everything before the main verb, then the main verb (twice if there are two: “sign and return”)
+    const main = (f) => {
+      if (tense === 'past') return neg ? f.base : f.past;
+      if (tense === 'present') return neg || plural ? f.base : f.third;
+      if (tense === 'modal') return f.base;
+      if (tense === 'progressive') return f.ing;
+      return f.part;
+    };
+    let aux;
+    if (tense === 'past') aux = neg ? 'did not' : '';
+    else if (tense === 'present') aux = neg ? (plural ? 'do not' : 'does not') : '';
+    else if (tense === 'modal') aux = A(lead, neg ? 'not' : '');
+    else if (tense === 'pastperfect') aux = A('had', neg ? 'not' : '');
+    else if (tense === 'perfect') aux = A(plural ? 'have' : 'has', neg ? 'not' : '');
+    else {
+      const present = /^(is|are|am)$/.test(lead);
+      aux = A(present ? (/^i$/i.test(who) ? 'am' : plural ? 'are' : 'is') : (plural && !/^i$/i.test(who) ? 'were' : 'was'), neg ? 'not' : '');
+    }
+    const verbs = A(aux, adv, main(forms), pair ? A(pair[1].toLowerCase(), main(forms2)) : '');
+    const lead0 = atStart ? who.charAt(0).toUpperCase() + who.slice(1) : who;
+    const rep = `${lead0} ${verbs} ${obj}`;
     const shown = (rep + text.slice(end).split(/[.!?\n]/)[0]).trim();
     return { label: shown.length > 56 ? shown.slice(0, 54).replace(/\s+\S*$/, '') + '…' : shown, start: clauseStart, end, replacement: rep };
   };
   return agent ? [make(agent)] : [make('we'), make('I')];
 }
 
-function passiveIssues(text) {
+function passiveIssues(text, checker = null) {
   const out = [];
-  const re = new RegExp(`\\b(am|is|are|was|were|be|been|being|get|gets|got|getting|gotten)\\s+(?:(\\w+ly)\\s+)?(\\w+ed|${IRREGULAR_PARTICIPLES.join('|')})\\b`, 'gi');
+  const re = new RegExp(`\\b(am|is|are|was|were|be|been|being|get|gets|got|getting|gotten)\\s+(?:(not|never)\\s+)?(?:(\\w+ly)\\s+)?(\\w+ed|${IRREGULAR_PARTICIPLES.join('|')})\\b`, 'gi');
   const sents = sentences(text);
   let m;
   while ((m = re.exec(text))) {
-    const participle = m[3].toLowerCase();
+    const participle = m[4].toLowerCase();
     if (NOT_PASSIVE.has(participle)) continue;
     if (/^(need|feed|seed|speed|bleed|breed|weed|indeed|exceed|proceed|succeed|bed|red|shed|wed|led|fed)$/.test(participle)) continue;
-    // “has been sent”: take the helper word too, so the highlight reads as the whole verb
-    const lead = text.slice(0, m.index).match(/\b(has|have|had)\s+$/i);
-    const start = lead && m[1].toLowerCase() === 'been' ? m.index - lead[0].length : m.index;
-    const sentence = sents.find((s) => s.start <= m.index && s.end >= m.index + m[0].length);
-    const fixes = sentence ? passiveRewrites(text, { 0: m[0], 1: m[1], 2: lead && m[1].toLowerCase() === 'been' ? lead[1] : null, index: m.index }, start, participle, sentence) : [];
+    const aux = m[1].toLowerCase();
+    // The helper word before it: “has been sent”, “will be sent”, “is being sent”
+    const lead = text.slice(0, m.index).match(/\b(has|have|had|is|are|am|was|were|will|would|can|could|should|must|may|might|shall)\s+$/i);
+    const leadWord = lead && ((aux === 'been' && /^(has|have|had)$/i.test(lead[1])) || (aux === 'be' && MODALS.has(lead[1].toLowerCase())) || (aux === 'being' && /^(is|are|am|was|were)$/i.test(lead[1]))) ? lead : null;
+    const start = leadWord ? m.index - leadWord[0].length : m.index;
+    const matchEnd = m.index + m[0].length;
+    const sentence = sents.find((s) => s.start <= m.index && s.end >= matchEnd);
+    const fixes = sentence ? passiveRewrites(text, { aux, lead: leadWord ? leadWord[1].toLowerCase() : null, neg: !!m[2], adverb: m[3] || '', participle, index: m.index, matchEnd, start }, sentence, checker) : [];
     out.push({
-      rule: 'passive', category: 'passive', start, end: m.index + m[0].length, text: text.slice(start, m.index + m[0].length),
+      rule: 'passive', category: 'passive', start, end: matchEnd, text: text.slice(start, matchEnd),
       message: fixes.length
-        ? 'Possible passive voice. Saying who did it is clearer and sounds more helpful. Pick a rewrite, or keep it if the “who” does not matter.'
+        ? 'Passive voice. Saying who did it is clearer and sounds more helpful. Pick a rewrite below, or keep the sentence if the “who” does not matter.'
         : PASSIVE_TIPS + ' If the “who” does not matter, or you do not know, the passive is fine.',
       fixes,
     });
@@ -818,7 +894,7 @@ export function check(text, { settings = DEFAULT_SETTINGS, checker = null, perso
   if (on.vague !== false) phrases = phrases.concat(phraseIssues(text, VAGUE.map(([p, note]) => [p, null, note]), 'vague', (p, swap, note) => note));
   phrases = dropContained(phrases);
   issues = issues.concat(phrases);
-  if (on.passive) issues = issues.concat(passiveIssues(text).filter((p) => !phrases.some((q) => p.start < q.end && p.end > q.start)));
+  if (on.passive) issues = issues.concat(passiveIssues(text, checker).filter((p) => !phrases.some((q) => p.start < q.end && p.end > q.start)));
   if (on.long) issues = issues.concat(longSentenceIssues(text, settings.longSentence || 25));
   if (on.repeat) issues = issues.concat(repeatIssues(text));
   if (on.shouty) issues = issues.concat(shoutyIssues(text));

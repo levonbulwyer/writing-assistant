@@ -53073,82 +53073,158 @@ Kind regards,
   function dropContained(issues) {
     return issues.filter((a3) => !issues.some((b) => b !== a3 && b.start <= a3.start && b.end >= a3.end && b.end - b.start > a3.end - a3.start));
   }
-  var PAST_OF = {
-    done: "did",
-    given: "gave",
-    taken: "took",
-    seen: "saw",
-    known: "knew",
-    written: "wrote",
-    shown: "showed",
-    chosen: "chose",
-    broken: "broke",
-    spoken: "spoke",
-    forgotten: "forgot",
-    begun: "began",
-    drawn: "drew",
-    driven: "drove",
-    eaten: "ate"
+  var IRREGULAR_VERBS = {
+    done: ["do", "did"],
+    given: ["give", "gave"],
+    taken: ["take", "took"],
+    seen: ["see", "saw"],
+    known: ["know", "knew"],
+    written: ["write", "wrote"],
+    shown: ["show", "showed"],
+    chosen: ["choose", "chose"],
+    broken: ["break", "broke"],
+    spoken: ["speak", "spoke"],
+    forgotten: ["forget", "forgot"],
+    begun: ["begin", "began"],
+    drawn: ["draw", "drew"],
+    driven: ["drive", "drove"],
+    eaten: ["eat", "ate"],
+    made: ["make", "made"],
+    sent: ["send", "sent"],
+    told: ["tell", "told"],
+    paid: ["pay", "paid"],
+    found: ["find", "found"],
+    held: ["hold", "held"],
+    kept: ["keep", "kept"],
+    left: ["leave", "left"],
+    built: ["build", "built"],
+    brought: ["bring", "brought"],
+    bought: ["buy", "bought"],
+    caught: ["catch", "caught"],
+    taught: ["teach", "taught"],
+    thought: ["think", "thought"],
+    sold: ["sell", "sold"]
   };
-  var SAME_PAST = new Set("made sent told paid found held kept left built brought bought caught taught thought sold".split(" "));
   var DETERMINERS = new Set("the a an your our my this that these those his her their its".split(" "));
-  var NOT_SUBJECTS = new Set("i we you they he she it there which who what when where if because and but so as that".split(" "));
+  var NOT_SUBJECTS = new Set("it there which who what when where if because and but so as that".split(" "));
+  var TO_OBJECT = { you: "you", he: "him", she: "her", they: "them", i: "me", we: "us" };
+  var TO_SUBJECT = { me: "I", us: "we", him: "he", her: "she", them: "they" };
+  var MODALS = new Set("will would can could should must may might shall".split(" "));
   var NOT_AGENTS = /^(?:(?:mon|tues|wednes|thurs|fri|satur|sun)day|today|tomorrow|tonight|yesterday|noon|midday|midnight|the end|end of|next|this|last|\d|eod|cob|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|then|now|which|when|the time)/i;
+  var BY_AGENT = /^\s+by\s+([^,.;:!?\n]+?)(?=\s+(?:on|in|at|to|for|from|before|after|within|until|so|and|but|because|when|if)\b|[,.;:!?\n]|$)/i;
   var PASSIVE_TIPS = "Possible passive voice. Say who did it: “We sent the form” reads better than “The form was sent”.";
-  function passiveRewrites(text, m3, auxStart, participle, sentence) {
-    const aux = m3[1].toLowerCase();
-    const perfect = m3[2] ? m3[2].toLowerCase() : null;
-    const past3 = PAST_OF[participle] || (SAME_PAST.has(participle) ? participle : /ed$/.test(participle) ? participle : null);
-    if (!past3) return [];
-    const tense = perfect && aux === "been" ? "perfect" : (aux === "was" || aux === "were") && !perfect ? "past" : null;
+  function verbForms(participle, checker) {
+    const ok3 = (w) => !checker || checker.correct(w);
+    let base, past3;
+    if (IRREGULAR_VERBS[participle]) [base, past3] = IRREGULAR_VERBS[participle];
+    else if (/ed$/.test(participle)) {
+      past3 = participle;
+      const cands = [];
+      if (/ied$/.test(participle)) cands.push(participle.slice(0, -3) + "y");
+      if (/([^aeiou])\1ed$/.test(participle)) cands.push(participle.slice(0, -3));
+      cands.push(participle.slice(0, -2), participle.slice(0, -1));
+      const pref = /(at|iz|is|ov|ur|us|ag|ak|ir|ar|ac|ul|ib|ud|ng|rg|nc)ed$/.test(participle) ? [participle.slice(0, -1), participle.slice(0, -2)] : null;
+      const order2 = checker ? cands : pref ? pref.concat(cands) : cands;
+      base = order2.find((c2) => c2.length > 1 && ok3(c2));
+    }
+    if (!base || !past3) return null;
+    const third = /(s|x|z|ch|sh)$/.test(base) ? base + "es" : /[^aeiou]y$/.test(base) ? base.slice(0, -1) + "ies" : base === "do" ? "does" : base + "s";
+    const ingCands = [];
+    if (/ie$/.test(base)) ingCands.push(base.slice(0, -2) + "ying");
+    if (/[^e]e$/.test(base)) ingCands.push(base.slice(0, -1) + "ing");
+    ingCands.push(base + "ing", base + base.slice(-1) + "ing");
+    const ing = ingCands.find((c2) => !checker || checker.correct(c2)) || ingCands[0];
+    return { base, past: past3, part: participle, third, ing };
+  }
+  var isPlural = (who) => /^(i|we|you|they)$/i.test(who) || /s$/i.test(who) && !/ss$/i.test(who);
+  function passiveRewrites(text, info, sentence, checker) {
+    const { aux, lead, neg, adverb, participle, index: index4, matchEnd, start: start3 } = info;
+    const forms6 = verbForms(participle, checker);
+    if (!forms6) return [];
+    let tense = null;
+    if ((aux === "was" || aux === "were") && !lead) tense = "past";
+    else if (/^(is|are|am)$/.test(aux) && !lead) tense = "present";
+    else if (aux === "be" && lead && MODALS.has(lead)) tense = "modal";
+    else if (aux === "been" && lead === "had") tense = "pastperfect";
+    else if (aux === "been" && /^(has|have)$/.test(lead || "")) tense = "perfect";
+    else if (aux === "being" && /^(is|are|am|was|were)$/.test(lead || "")) tense = "progressive";
     if (!tense) return [];
-    const before2 = text.slice(sentence.start, auxStart);
+    const before2 = text.slice(sentence.start, start3);
     let clauseStart = sentence.start;
     const cut = /(?:,|;)\s+|\b(?:that|because|and|but|so|as|when|if|while)\s+/gi;
     let c2;
     while (c2 = cut.exec(before2)) clauseStart = sentence.start + c2.index + c2[0].length;
-    const subject = text.slice(clauseStart, auxStart).trim();
-    const firstWord2 = (subject.match(/^[\p{L}'’-]+/u) || [""])[0].toLowerCase();
-    const nWords = words(subject).length;
-    if (!subject || nWords > 8 || NOT_SUBJECTS.has(firstWord2) || /[,;:()]/.test(subject)) return [];
     const atStart = clauseStart === sentence.start;
-    const subj = DETERMINERS.has(firstWord2) ? subject.charAt(0).toLowerCase() + subject.slice(1) : subject;
-    const partEnd = m3.index + m3[0].length;
-    const tail = text.slice(partEnd);
-    const by = tail.match(/^\s+by\s+([^,.;:!?\n]+?)(?=\s+(?:on|in|at|to|for|from|before|after|within|until|so|and|but|because|when|if)\b|[,.;:!?\n]|$)/i);
-    const agent = by && !NOT_AGENTS.test(by[1].trim()) ? by[1].trim() : null;
-    const end2 = agent ? partEnd + by[0].length : partEnd;
-    const verb = tense === "perfect" ? participle : past3;
-    const make = (who) => {
-      const lead = atStart ? who.charAt(0).toUpperCase() + who.slice(1) : who;
-      let have = "";
-      if (tense === "perfect") have = /^(i|we|you|they)$/i.test(who) || /s$/i.test(who) && !/ss$/i.test(who) ? " have" : " has";
-      const rep = `${lead}${have} ${verb} ${subj}`;
+    const subject = text.slice(clauseStart, start3).trim();
+    const firstWord2 = (subject.match(/^[\p{L}'’-]+/u) || [""])[0].toLowerCase();
+    const pronoun = /^(you|he|she|they|i|we)$/.test(subject.toLowerCase());
+    if (!subject || words(subject).length > 8 || NOT_SUBJECTS.has(firstWord2) || /[,;:()]/.test(subject)) return [];
+    if (!pronoun && /^(i|we|you|he|she|they)$/.test(firstWord2)) return [];
+    const looksLikeName = new RegExp("^\\p{Lu}", "u").test(subject) && (/^[\p{L}'’-]+['’]s\b/u.test(subject) || !checker || !checker.correct(firstWord2) || new RegExp(`[^.!?\\n]\\s${escapeRegex(firstWord2)}\\b`).test(text.replace(subject, "")) || new RegExp("^\\p{Lu}", "u").test(subject.split(/\s+/)[1] || ""));
+    let obj = pronoun ? TO_OBJECT[subject.toLowerCase()] : DETERMINERS.has(firstWord2) || atStart && !looksLikeName ? subject.charAt(0).toLowerCase() + subject.slice(1) : subject;
+    const tail = text.slice(matchEnd);
+    const by = tail.match(BY_AGENT);
+    const pair = tail.match(new RegExp(`^\\s+(and|or)\\s+(\\w+ed|${IRREGULAR_PARTICIPLES.join("|")})\\b`, "i"));
+    const forms22 = pair ? verbForms(pair[2].toLowerCase(), checker) : null;
+    if (pair && !forms22) return [];
+    const afterPair = pair ? tail.slice(pair[0].length) : tail;
+    const by2 = pair ? afterPair.match(BY_AGENT) : by;
+    const agent = by2 && !NOT_AGENTS.test(by2[1].trim()) ? by2[1].trim() : null;
+    if (!agent && /^(i|we)$/.test(subject.toLowerCase())) return [];
+    const end2 = matchEnd + (pair ? pair[0].length : 0) + (agent ? by2[0].length : 0);
+    const adv = adverb ? adverb.toLowerCase() : "";
+    const make = (whoRaw) => {
+      const who = TO_SUBJECT[whoRaw.toLowerCase()] || whoRaw;
+      const plural3 = isPlural(who);
+      const A = (...w) => w.filter(Boolean).join(" ");
+      const main = (f3) => {
+        if (tense === "past") return neg ? f3.base : f3.past;
+        if (tense === "present") return neg || plural3 ? f3.base : f3.third;
+        if (tense === "modal") return f3.base;
+        if (tense === "progressive") return f3.ing;
+        return f3.part;
+      };
+      let aux2;
+      if (tense === "past") aux2 = neg ? "did not" : "";
+      else if (tense === "present") aux2 = neg ? plural3 ? "do not" : "does not" : "";
+      else if (tense === "modal") aux2 = A(lead, neg ? "not" : "");
+      else if (tense === "pastperfect") aux2 = A("had", neg ? "not" : "");
+      else if (tense === "perfect") aux2 = A(plural3 ? "have" : "has", neg ? "not" : "");
+      else {
+        const present2 = /^(is|are|am)$/.test(lead);
+        aux2 = A(present2 ? /^i$/i.test(who) ? "am" : plural3 ? "are" : "is" : plural3 && !/^i$/i.test(who) ? "were" : "was", neg ? "not" : "");
+      }
+      const verbs = A(aux2, adv, main(forms6), pair ? A(pair[1].toLowerCase(), main(forms22)) : "");
+      const lead0 = atStart ? who.charAt(0).toUpperCase() + who.slice(1) : who;
+      const rep = `${lead0} ${verbs} ${obj}`;
       const shown = (rep + text.slice(end2).split(/[.!?\n]/)[0]).trim();
       return { label: shown.length > 56 ? shown.slice(0, 54).replace(/\s+\S*$/, "") + "…" : shown, start: clauseStart, end: end2, replacement: rep };
     };
     return agent ? [make(agent)] : [make("we"), make("I")];
   }
-  function passiveIssues(text) {
+  function passiveIssues(text, checker = null) {
     const out2 = [];
-    const re = new RegExp(`\\b(am|is|are|was|were|be|been|being|get|gets|got|getting|gotten)\\s+(?:(\\w+ly)\\s+)?(\\w+ed|${IRREGULAR_PARTICIPLES.join("|")})\\b`, "gi");
+    const re = new RegExp(`\\b(am|is|are|was|were|be|been|being|get|gets|got|getting|gotten)\\s+(?:(not|never)\\s+)?(?:(\\w+ly)\\s+)?(\\w+ed|${IRREGULAR_PARTICIPLES.join("|")})\\b`, "gi");
     const sents = sentences(text);
     let m3;
     while (m3 = re.exec(text)) {
-      const participle = m3[3].toLowerCase();
+      const participle = m3[4].toLowerCase();
       if (NOT_PASSIVE.has(participle)) continue;
       if (/^(need|feed|seed|speed|bleed|breed|weed|indeed|exceed|proceed|succeed|bed|red|shed|wed|led|fed)$/.test(participle)) continue;
-      const lead = text.slice(0, m3.index).match(/\b(has|have|had)\s+$/i);
-      const start3 = lead && m3[1].toLowerCase() === "been" ? m3.index - lead[0].length : m3.index;
-      const sentence = sents.find((s3) => s3.start <= m3.index && s3.end >= m3.index + m3[0].length);
-      const fixes = sentence ? passiveRewrites(text, { 0: m3[0], 1: m3[1], 2: lead && m3[1].toLowerCase() === "been" ? lead[1] : null, index: m3.index }, start3, participle, sentence) : [];
+      const aux = m3[1].toLowerCase();
+      const lead = text.slice(0, m3.index).match(/\b(has|have|had|is|are|am|was|were|will|would|can|could|should|must|may|might|shall)\s+$/i);
+      const leadWord = lead && (aux === "been" && /^(has|have|had)$/i.test(lead[1]) || aux === "be" && MODALS.has(lead[1].toLowerCase()) || aux === "being" && /^(is|are|am|was|were)$/i.test(lead[1])) ? lead : null;
+      const start3 = leadWord ? m3.index - leadWord[0].length : m3.index;
+      const matchEnd = m3.index + m3[0].length;
+      const sentence = sents.find((s3) => s3.start <= m3.index && s3.end >= matchEnd);
+      const fixes = sentence ? passiveRewrites(text, { aux, lead: leadWord ? leadWord[1].toLowerCase() : null, neg: !!m3[2], adverb: m3[3] || "", participle, index: m3.index, matchEnd, start: start3 }, sentence, checker) : [];
       out2.push({
         rule: "passive",
         category: "passive",
         start: start3,
-        end: m3.index + m3[0].length,
-        text: text.slice(start3, m3.index + m3[0].length),
-        message: fixes.length ? "Possible passive voice. Saying who did it is clearer and sounds more helpful. Pick a rewrite, or keep it if the “who” does not matter." : PASSIVE_TIPS + " If the “who” does not matter, or you do not know, the passive is fine.",
+        end: matchEnd,
+        text: text.slice(start3, matchEnd),
+        message: fixes.length ? "Passive voice. Saying who did it is clearer and sounds more helpful. Pick a rewrite below, or keep the sentence if the “who” does not matter." : PASSIVE_TIPS + " If the “who” does not matter, or you do not know, the passive is fine.",
         fixes
       });
     }
@@ -53518,7 +53594,7 @@ Kind regards,
     if (on.vague !== false) phrases = phrases.concat(phraseIssues(text, VAGUE.map(([p5, note]) => [p5, null, note]), "vague", (p5, swap2, note) => note));
     phrases = dropContained(phrases);
     issues = issues.concat(phrases);
-    if (on.passive) issues = issues.concat(passiveIssues(text).filter((p5) => !phrases.some((q) => p5.start < q.end && p5.end > q.start)));
+    if (on.passive) issues = issues.concat(passiveIssues(text, checker).filter((p5) => !phrases.some((q) => p5.start < q.end && p5.end > q.start)));
     if (on.long) issues = issues.concat(longSentenceIssues(text, settings.longSentence || 25));
     if (on.repeat) issues = issues.concat(repeatIssues(text));
     if (on.shouty) issues = issues.concat(shoutyIssues(text));
@@ -75283,7 +75359,7 @@ Kind regards,
   var quickSplit_default = quickSplit;
 
   // node_modules/compromise/src/2-two/preTagger/methods/looksPlural.js
-  var isPlural = {
+  var isPlural2 = {
     e: ["mice", "louse", "antennae", "formulae", "nebulae", "vertebrae", "vitae"],
     i: ["tia", "octopi", "viri", "radii", "nuclei", "fungi", "cacti", "stimuli"],
     n: ["men"],
@@ -75361,8 +75437,8 @@ Kind regards,
       return true;
     }
     const end2 = str[str.length - 1];
-    if (isPlural.hasOwnProperty(end2)) {
-      return isPlural[end2].find((suff) => str.endsWith(suff));
+    if (isPlural2.hasOwnProperty(end2)) {
+      return isPlural2[end2].find((suff) => str.endsWith(suff));
     }
     if (end2 !== "s") {
       return false;
@@ -80345,7 +80421,7 @@ Kind regards,
 
   // node_modules/compromise/src/3-three/nouns/api/isPlural.js
   var notPlural2 = "(#Pronoun|#Place|#Value|#Person|#Uncountable|#Month|#WeekDay|#Holiday|#Possessive)";
-  var isPlural2 = function(m3, root) {
+  var isPlural3 = function(m3, root) {
     if (m3.has("#Plural")) {
       return true;
     }
@@ -80364,7 +80440,7 @@ Kind regards,
     const str = root.text("normal");
     return str.length > 3 && str.endsWith("s") && !str.endsWith("ss");
   };
-  var isPlural_default = isPlural2;
+  var isPlural_default = isPlural3;
 
   // node_modules/compromise/src/3-three/nouns/api/parse.js
   var getRoot2 = function(m3) {
@@ -82635,7 +82711,7 @@ Kind regards,
     });
     return data2;
   };
-  var verbForms = {
+  var verbForms2 = {
     // === Simple ===
     "imperative": [
       // walk!
@@ -82779,8 +82855,8 @@ Kind regards,
     ]
   };
   var list4 = [];
-  Object.keys(verbForms).map((k2) => {
-    verbForms[k2].forEach((a3) => {
+  Object.keys(verbForms2).map((k2) => {
+    verbForms2[k2].forEach((a3) => {
       list4.push({
         name: k2,
         match: a3[0],
@@ -82902,7 +82978,7 @@ Kind regards,
     }
     return last;
   };
-  var isPlural3 = function(subj, vb3) {
+  var isPlural4 = function(subj, vb3) {
     if (vb3.has("(are|were|does)")) {
       return true;
     }
@@ -82918,14 +82994,14 @@ Kind regards,
     const subj = lastNoun2(vb3);
     return {
       subject: subj,
-      plural: isPlural3(subj, vb3)
+      plural: isPlural4(subj, vb3)
     };
   };
   var getSubject_default = getSubject;
 
   // node_modules/compromise/src/3-three/verbs/api/lib.js
   var noop = (vb3) => vb3;
-  var isPlural4 = (vb3, parsed) => {
+  var isPlural5 = (vb3, parsed) => {
     const subj = getSubject_default(vb3, parsed);
     const m3 = subj.subject;
     if (m3.has("i") || m3.has("we")) {
@@ -83339,7 +83415,7 @@ Kind regards,
     const root = parsed.root;
     let str = root.text("normal");
     str = toInfinitive3(str, vb3.model, getTense2(root));
-    if (isPlural4(vb3, parsed) === false) {
+    if (isPlural5(vb3, parsed) === false) {
       str = conjugate2(str, vb3.model).PresentTense;
     }
     if (root.has("#Copula")) {
@@ -83356,7 +83432,7 @@ Kind regards,
     const root = parsed.root;
     let str = root.text("normal");
     str = toInfinitive3(str, vb3.model, getTense2(root));
-    if (isPlural4(vb3, parsed) === false) {
+    if (isPlural5(vb3, parsed) === false) {
       str = conjugate2(str, vb3.model).Gerund;
     }
     if (str) {
@@ -83385,7 +83461,7 @@ Kind regards,
       if (root.has("#Infinitive")) {
         const subj = getSubject_default(vb3, parsed);
         const m3 = subj.subject;
-        if (isPlural4(vb3, parsed) || m3.has("i")) {
+        if (isPlural5(vb3, parsed) || m3.has("i")) {
           return vb3;
         }
         const str = root.text("normal");
@@ -83437,7 +83513,7 @@ Kind regards,
     "past-perfect": (vb3, parsed) => {
       const subj = getSubject_default(vb3, parsed);
       const m3 = subj.subject;
-      if (isPlural4(vb3, parsed) || m3.has("i")) {
+      if (isPlural5(vb3, parsed) || m3.has("i")) {
         vb3 = toInf(vb3, parsed);
         vb3.remove("had");
         return vb3;
@@ -83521,7 +83597,7 @@ Kind regards,
     // wanted to walk
     "want-infinitive": (vb3, parsed) => {
       let str = "wants";
-      if (isPlural4(vb3, parsed)) {
+      if (isPlural5(vb3, parsed)) {
         str = "want";
       }
       vb3.replace("(want|wanted|wants)", str, keep5);
