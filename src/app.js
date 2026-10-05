@@ -1154,6 +1154,7 @@ const CHECK_ROWS = [
   ['capital', 'Capital letters', 'Names, places, days, “I” and the start of sentences'],
   ['grammar', 'Grammar', '“a” or “an”, its or it’s, agreement, missing apostrophes'],
   ['inclusive', 'Inclusive wording', 'Words that can read as insensitive'],
+  ['vague', 'Vague wording', '“soon”, “a few days”, “several”: say when or how many'],
   ['placeholder', 'Blanks to fill in', 'Template blanks like {{Customer name}}'],
 ];
 

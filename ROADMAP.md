@@ -86,6 +86,8 @@ Phase 1 is built. Use its list to demo and test the app: each item says how to t
 - [x] Capitals (own rules): sentence and line starts, I, days, titles, names in greetings and after sign-offs, places and brands. Add your own under Settings → Names to capitalise.
 - [x] Libraries: Harper (grammar), retext (a/an, apostrophes, insensitive wording), compromise (names and places). Each group has a switch in Settings → Checks. Test: footer says Grammar: ready after a few seconds.
 - [x] Fix Simple also applies our own comma and capital fixes.
+- [x] Passive voice offers rewrites that say who did it. Test: `Your refund was processed by our team.`
+- [x] Work-email phrases (jargon, padding, “revert back”) and a Vague wording check for “soon”, “a few days”, “several”. Test: `We will call you soon.`
 - [ ] Open the built file on the work computer and check that Grammar: ready appears (needs WebAssembly allowed). **Needs you.**
 
 ## Phase 2: Improvement pipeline

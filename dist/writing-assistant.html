@@ -233,6 +233,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .u-capital { text-decoration: underline var(--purple); }
 .u-grammar { text-decoration: underline wavy #34c759; text-decoration-thickness: 1.5px !important; }
 .u-inclusive { text-decoration: underline dotted #8e8e93; }
+.u-vague { text-decoration: underline dotted rgba(0, 122, 255, 0.75); }
 .u-wordy, .u-filler, .u-passive { text-decoration: underline rgba(0, 122, 255, 0.75); }
 .bg-long { background: rgba(255, 204, 0, 0.2); border-radius: 0 !important; }
 .bg-fill { background: rgba(175, 82, 222, 0.16); box-shadow: 0 0 0 1px rgba(175, 82, 222, 0.35); }
@@ -52397,7 +52398,39 @@ zymurgy/M
     ["as soon as possible", null, "Vague. Give a date or time if you can."],
     ["ASAP", null, "Vague. Give a date or time if you can."],
     ["we apologise for any inconvenience caused", "we're sorry for the trouble this caused"],
-    ["we apologise for any inconvenience", "we're sorry for the trouble"]
+    ["we apologise for any inconvenience", "we're sorry for the trouble"],
+    // Work-email phrases: business jargon, padding and common slips
+    ["at the end of the day", "overall"],
+    ["circle back", "come back to this"],
+    ["bandwidth", "time"],
+    ["think outside the box", "think differently"],
+    ["at this juncture", "now"],
+    ["in a timely manner", "promptly"],
+    ["in the amount of", "for"],
+    ["as a matter of fact", ""],
+    ["needless to say", ""],
+    ["it goes without saying", ""],
+    ["to be honest", ""],
+    ["with that being said", "but"],
+    ["having said that", "but"],
+    ["in light of the fact that", "because"],
+    ["by means of", "by"],
+    ["in the course of", "during"],
+    ["at a later date", "later"],
+    ["at the earliest opportunity", "soon"],
+    ["in order for", "for"],
+    ["with the exception of", "except"],
+    ["pertaining to", "about"],
+    ["in connection with", "about"],
+    ["revert back", "reply"],
+    ["kindly revert", "please reply"],
+    ["do the needful", "do what is needed"],
+    ["thank you in advance", "thank you"],
+    ["hope this email finds you well", ""],
+    ["i trust this finds you well", ""],
+    ["please find attached", "attached is"],
+    ["low-hanging fruit", null, "Business jargon. Say what you mean: “the easy fixes”."],
+    ["move the needle", null, "Business jargon. Say what will change."]
   ];
   var AVOID_DEFAULT = [
     { phrase: "you failed to", swap: "we haven't received", why: "Sounds like blame." },
@@ -52605,6 +52638,23 @@ Kind regards,
   ];
   var TITLES = ["mr", "mrs", "ms", "mx", "dr"];
   var PROPER_NOUNS = `New Zealand|Aotearoa|Auckland|Wellington|Christchurch|Hamilton|Tauranga|Dunedin|Palmerston North|Napier|Hastings|Nelson|Rotorua|Whangārei|Whangarei|Invercargill|Queenstown|Whanganui|Gisborne|Timaru|Blenheim|Taupō|Taupo|New Plymouth|Porirua|Lower Hutt|Upper Hutt|Hutt Valley|Waikato|Canterbury|Otago|Southland|Northland|Taranaki|Manawatū|Manawatu|Marlborough|Hawke's Bay|Hawkes Bay|Bay of Plenty|North Island|South Island|Stewart Island|Chatham Islands|Australia|Sydney|Melbourne|Brisbane|Perth|England|Scotland|Ireland|Europe|Asia|Māori|Maori|Pākehā|Pakeha|Pasifika|Facebook|Instagram|LinkedIn|Google|Microsoft|PowerPoint|Android|iPhone|Samsung|Netflix|Spotify|Skype|WhatsApp|YouTube|Christmas|Easter|Waitangi Day|Anzac Day|Matariki|Labour Day|Boxing Day|New Year's Day`.split("|");
+  var VAGUE = [
+    ["soon", "Vague. Give a day or date, such as “by Friday 10 October”."],
+    ["shortly", "Vague. Give a day or date, such as “by Friday 10 October”."],
+    ["in due course", "Vague. Give a day or date, such as “by Friday 10 October”."],
+    ["in the near future", "Vague. Give a day or date, such as “by Friday 10 October”."],
+    ["a few days", "Vague. Say how many days, or give a date."],
+    ["a couple of days", "Vague. Say how many days, or give a date."],
+    ["a few weeks", "Vague. Say how many weeks, or give a date."],
+    ["in a while", "Vague. Say when."],
+    ["various", "Vague. Say which ones."],
+    ["several", "Vague. Give the number if you know it."],
+    ["a lot of", "Vague. Give the number or amount if you know it."],
+    ["fairly", "Vague. Say how much, or leave it out."],
+    ["relatively", "Vague. Compared with what? Say, or leave it out."],
+    ["substantially", "Vague. Say how much."],
+    ["significantly", "Vague. Say how much."]
+  ];
 
   // src/engine.js
   var DEFAULT_SETTINGS = {
@@ -52628,7 +52678,8 @@ Kind regards,
       punctuation: true,
       capital: true,
       grammar: true,
-      inclusive: true
+      inclusive: true,
+      vague: true
     },
     properNouns: [],
     // your own names and brands that always take a capital
@@ -52652,7 +52703,8 @@ Kind regards,
     punctuation: { name: "Punctuation", tone: "teal" },
     capital: { name: "Capital letters", tone: "purple" },
     grammar: { name: "Grammar", tone: "green" },
-    inclusive: { name: "Wording", tone: "gray" }
+    inclusive: { name: "Wording", tone: "gray" },
+    vague: { name: "Vague wording", tone: "blue" }
   };
   var L = "\\p{L}\\p{M}";
   var ABBREVIATIONS = /* @__PURE__ */ new Set(["e.g", "i.e", "etc", "approx", "incl", "vs", "no", "cf", "ca", "mr", "mrs", "ms", "dr", "st", "ltd", "co", "ph", "tel", "attn", "ref", "nb", "p", "pp", "eg", "ie", "a.m", "p.m", "am", "pm", "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec"]);
@@ -53463,6 +53515,7 @@ Kind regards,
     if (on.filler) phrases = phrases.concat(phraseIssues(text, FILLER.map((p5) => [p5, ""]), "filler", () => "Filler word. Remove it, or say something more specific."));
     if (on.wordy) phrases = phrases.concat(phraseIssues(text, WORDY, "wordy", (p5, swap2, note) => note || (swap2 ? `Wordy. “${swap2}” says the same thing.` : "Adds words without adding meaning.")));
     if (on.avoid) phrases = phrases.concat(phraseIssues(text, settings.avoid || AVOID_DEFAULT, "avoid", (p5, swap2, why) => (why || "On your list of phrases to avoid.") + (swap2 ? ` Try “${swap2}”.` : "")));
+    if (on.vague !== false) phrases = phrases.concat(phraseIssues(text, VAGUE.map(([p5, note]) => [p5, null, note]), "vague", (p5, swap2, note) => note));
     phrases = dropContained(phrases);
     issues = issues.concat(phrases);
     if (on.passive) issues = issues.concat(passiveIssues(text).filter((p5) => !phrases.some((q) => p5.start < q.end && p5.end > q.start)));
@@ -53529,7 +53582,7 @@ Kind regards,
       }
       const cats = new Set(covering.map((i3) => i3.category));
       const cls = [];
-      const under = ["spelling", "grammar", "capital", "punctuation", "inclusive", "shouty", "avoid", "repeat", "wordy", "filler", "passive"].find((c2) => cats.has(c2));
+      const under = ["spelling", "grammar", "capital", "punctuation", "inclusive", "shouty", "avoid", "repeat", "wordy", "vague", "filler", "passive"].find((c2) => cats.has(c2));
       if (under) cls.push("u-" + under);
       if (cats.has("long")) cls.push("bg-long");
       if (cats.has("placeholder")) cls.push("bg-fill");
@@ -88939,6 +88992,7 @@ ${fromBody}`;
     ["capital", "Capital letters", "Names, places, days, “I” and the start of sentences"],
     ["grammar", "Grammar", "“a” or “an”, its or it’s, agreement, missing apostrophes"],
     ["inclusive", "Inclusive wording", "Words that can read as insensitive"],
+    ["vague", "Vague wording", "“soon”, “a few days”, “several”: say when or how many"],
     ["placeholder", "Blanks to fill in", "Template blanks like {{Customer name}}"]
   ];
   function seg(name, value, options) {

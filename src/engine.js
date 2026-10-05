@@ -3,7 +3,7 @@
 
 import {
   FILLER, WORDY, AVOID_DEFAULT, REPEAT_STOPWORDS, ACRONYMS, NOT_PASSIVE,
-  IRREGULAR_PARTICIPLES, NZ_WORDS, COMMA_OPENERS, SPLICE_WORDS, SIGNOFF_NEEDS_COMMA, TITLES, PROPER_NOUNS,
+  IRREGULAR_PARTICIPLES, NZ_WORDS, COMMA_OPENERS, SPLICE_WORDS, VAGUE, SIGNOFF_NEEDS_COMMA, TITLES, PROPER_NOUNS,
 } from './rules.js';
 
 export const DEFAULT_SETTINGS = {
@@ -14,7 +14,7 @@ export const DEFAULT_SETTINGS = {
   checks: {
     spelling: true, filler: true, wordy: true, avoid: true, passive: true,
     long: true, repeat: true, shouty: true, placeholder: true,
-    punctuation: true, capital: true, grammar: true, inclusive: true,
+    punctuation: true, capital: true, grammar: true, inclusive: true, vague: true,
   },
   properNouns: [],      // your own names and brands that always take a capital
   checkCapitalised: false,
@@ -38,6 +38,7 @@ export const CATEGORIES = {
   capital:     { name: 'Capital letters', tone: 'purple' },
   grammar:     { name: 'Grammar',         tone: 'green' },
   inclusive:   { name: 'Wording',         tone: 'gray' },
+  vague:       { name: 'Vague wording',   tone: 'blue' },
 };
 
 const L = '\\p{L}\\p{M}';
@@ -814,6 +815,7 @@ export function check(text, { settings = DEFAULT_SETTINGS, checker = null, perso
   if (on.filler) phrases = phrases.concat(phraseIssues(text, FILLER.map((p) => [p, '']), 'filler', () => 'Filler word. Remove it, or say something more specific.'));
   if (on.wordy) phrases = phrases.concat(phraseIssues(text, WORDY, 'wordy', (p, swap, note) => note || (swap ? `Wordy. “${swap}” says the same thing.` : 'Adds words without adding meaning.')));
   if (on.avoid) phrases = phrases.concat(phraseIssues(text, settings.avoid || AVOID_DEFAULT, 'avoid', (p, swap, why) => (why || 'On your list of phrases to avoid.') + (swap ? ` Try “${swap}”.` : '')));
+  if (on.vague !== false) phrases = phrases.concat(phraseIssues(text, VAGUE.map(([p, note]) => [p, null, note]), 'vague', (p, swap, note) => note));
   phrases = dropContained(phrases);
   issues = issues.concat(phrases);
   if (on.passive) issues = issues.concat(passiveIssues(text).filter((p) => !phrases.some((q) => p.start < q.end && p.end > q.start)));
@@ -885,7 +887,7 @@ export function highlightHtml(text, issues, activeId = null) {
     if (!covering.length) { html += chunk; continue; }
     const cats = new Set(covering.map((i) => i.category));
     const cls = [];
-    const under = ['spelling', 'grammar', 'capital', 'punctuation', 'inclusive', 'shouty', 'avoid', 'repeat', 'wordy', 'filler', 'passive'].find((c) => cats.has(c));
+    const under = ['spelling', 'grammar', 'capital', 'punctuation', 'inclusive', 'shouty', 'avoid', 'repeat', 'wordy', 'vague', 'filler', 'passive'].find((c) => cats.has(c));
     if (under) cls.push('u-' + under);
     if (cats.has('long')) cls.push('bg-long');
     if (cats.has('placeholder')) cls.push('bg-fill');

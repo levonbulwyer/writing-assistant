@@ -73,8 +73,8 @@ test('rules: ignored issues and turned-off rules are hidden', () => {
 });
 
 test('rules: your own phrase list is used', () => {
-  const settings = { ...E.DEFAULT_SETTINGS, avoid: [{ phrase: 'per my last email', swap: 'as I mentioned', why: 'Sounds tense.' }] };
-  const [issue] = E.check('Per my last email, it is fixed.', { settings });
+  const settings = { ...E.DEFAULT_SETTINGS, avoid: [{ phrase: 'as I said before', swap: 'as I mentioned', why: 'Sounds tense.' }] };
+  const [issue] = E.check('As I said before, it is fixed.', { settings });
   assert.equal(issue.category, 'avoid');
   assert.equal(issue.fixes[0].replacement, 'As I mentioned');
 });
@@ -262,4 +262,15 @@ test('passive: offers rewrites that say who did it', () => {
   assert.deepEqual(fixes('The form was sent by Friday.'), ['We sent the form by Friday.', 'I sent the form by Friday.']);
   assert.deepEqual(fixes('It was decided.'), []);
   assert.deepEqual(fixes('Calls are recorded for training.'), []);
+});
+
+test('work-email phrases and vague wording', () => {
+  const only = { ...E.DEFAULT_SETTINGS, checks: { wordy: true, vague: true } };
+  const found = (t) => E.check(t, { settings: only }).map((i) => [i.category, i.text, i.fixes[0]?.replacement ?? null]);
+  assert.deepEqual(found('At the end of the day we can circle back.'), [['wordy', 'At the end of the day', 'Overall'], ['wordy', 'circle back', 'come back to this']]);
+  assert.deepEqual(found('We will call you soon.'), [['vague', 'soon', null]]);
+  assert.deepEqual(found('You will hear in a few days.'), [['vague', 'a few days', null]]);
+  assert.deepEqual(found('Please revert back to us.'), [['wordy', 'revert back', 'reply']]);
+  const off = { ...only, checks: { wordy: true, vague: false } };
+  assert.deepEqual(E.check('We will call you soon.', { settings: off }), []);
 });

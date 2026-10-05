@@ -53,6 +53,38 @@ export const WORDY = [
   ['ASAP', null, 'Vague. Give a date or time if you can.'],
   ['we apologise for any inconvenience caused', "we're sorry for the trouble this caused"],
   ['we apologise for any inconvenience', "we're sorry for the trouble"],
+  // Work-email phrases: business jargon, padding and common slips
+  ['at the end of the day', 'overall'],
+  ['circle back', 'come back to this'],
+  ['bandwidth', 'time'],
+  ['think outside the box', 'think differently'],
+  ['at this juncture', 'now'],
+  ['in a timely manner', 'promptly'],
+  ['in the amount of', 'for'],
+  ['as a matter of fact', ''],
+  ['needless to say', ''],
+  ['it goes without saying', ''],
+  ['to be honest', ''],
+  ['with that being said', 'but'],
+  ['having said that', 'but'],
+  ['in light of the fact that', 'because'],
+  ['by means of', 'by'],
+  ['in the course of', 'during'],
+  ['at a later date', 'later'],
+  ['at the earliest opportunity', 'soon'],
+  ['in order for', 'for'],
+  ['with the exception of', 'except'],
+  ['pertaining to', 'about'],
+  ['in connection with', 'about'],
+  ['revert back', 'reply'],
+  ['kindly revert', 'please reply'],
+  ['do the needful', 'do what is needed'],
+  ['thank you in advance', 'thank you'],
+  ['hope this email finds you well', ''],
+  ['i trust this finds you well', ''],
+  ['please find attached', 'attached is'],
+  ['low-hanging fruit', null, 'Business jargon. Say what you mean: “the easy fixes”.'],
+  ['move the needle', null, 'Business jargon. Say what will change.'],
 ];
 
 // Your workplace list: phrases to avoid, with a better option.
@@ -253,3 +285,23 @@ export const TITLES = ['mr', 'mrs', 'ms', 'mx', 'dr'];
 // Places, organisations and words that always take a capital. Words that are also ordinary words
 // ("spark", "one", "kiwi") are left out on purpose, or they would be flagged all the time.
 export const PROPER_NOUNS = `New Zealand|Aotearoa|Auckland|Wellington|Christchurch|Hamilton|Tauranga|Dunedin|Palmerston North|Napier|Hastings|Nelson|Rotorua|Whangārei|Whangarei|Invercargill|Queenstown|Whanganui|Gisborne|Timaru|Blenheim|Taupō|Taupo|New Plymouth|Porirua|Lower Hutt|Upper Hutt|Hutt Valley|Waikato|Canterbury|Otago|Southland|Northland|Taranaki|Manawatū|Manawatu|Marlborough|Hawke's Bay|Hawkes Bay|Bay of Plenty|North Island|South Island|Stewart Island|Chatham Islands|Australia|Sydney|Melbourne|Brisbane|Perth|England|Scotland|Ireland|Europe|Asia|Māori|Maori|Pākehā|Pakeha|Pasifika|Facebook|Instagram|LinkedIn|Google|Microsoft|PowerPoint|Android|iPhone|Samsung|Netflix|Spotify|Skype|WhatsApp|YouTube|Christmas|Easter|Waitangi Day|Anzac Day|Matariki|Labour Day|Boxing Day|New Year's Day`.split('|');
+
+// Vague wording. No automatic fix: the writer knows the real day, number or name.
+// The first group matters most in customer emails: promises with no date.
+export const VAGUE = [
+  ['soon', 'Vague. Give a day or date, such as “by Friday 10 October”.'],
+  ['shortly', 'Vague. Give a day or date, such as “by Friday 10 October”.'],
+  ['in due course', 'Vague. Give a day or date, such as “by Friday 10 October”.'],
+  ['in the near future', 'Vague. Give a day or date, such as “by Friday 10 October”.'],
+  ['a few days', 'Vague. Say how many days, or give a date.'],
+  ['a couple of days', 'Vague. Say how many days, or give a date.'],
+  ['a few weeks', 'Vague. Say how many weeks, or give a date.'],
+  ['in a while', 'Vague. Say when.'],
+  ['various', 'Vague. Say which ones.'],
+  ['several', 'Vague. Give the number if you know it.'],
+  ['a lot of', 'Vague. Give the number or amount if you know it.'],
+  ['fairly', 'Vague. Say how much, or leave it out.'],
+  ['relatively', 'Vague. Compared with what? Say, or leave it out.'],
+  ['substantially', 'Vague. Say how much.'],
+  ['significantly', 'Vague. Say how much.'],
+];

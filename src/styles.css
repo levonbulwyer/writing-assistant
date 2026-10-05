@@ -223,6 +223,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .u-capital { text-decoration: underline var(--purple); }
 .u-grammar { text-decoration: underline wavy #34c759; text-decoration-thickness: 1.5px !important; }
 .u-inclusive { text-decoration: underline dotted #8e8e93; }
+.u-vague { text-decoration: underline dotted rgba(0, 122, 255, 0.75); }
 .u-wordy, .u-filler, .u-passive { text-decoration: underline rgba(0, 122, 255, 0.75); }
 .bg-long { background: rgba(255, 204, 0, 0.2); border-radius: 0 !important; }
 .bg-fill { background: rgba(175, 82, 222, 0.16); box-shadow: 0 0 0 1px rgba(175, 82, 222, 0.35); }
